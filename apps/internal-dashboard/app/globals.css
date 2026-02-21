@@ -1,0 +1,104 @@
+:root {
+  --bg: #f8fafc;
+  --text: #0f172a;
+  --panel: #ffffff;
+  --border: #cbd5e1;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at top, #dbeafe 0%, #f8fafc 45%);
+  color: var(--text);
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 16px 42px;
+}
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 8px;
+  text-align: left;
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid currentColor;
+}
+
+.badge.low {
+  color: #166534;
+}
+
+.badge.moderate {
+  color: #1d4ed8;
+}
+
+.badge.important {
+  color: #92400e;
+}
+
+.badge.critical {
+  color: #b91c1c;
+}
+
+.badge.emergency {
+  color: #7f1d1d;
+}
+
+.controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+input,
+select,
+button {
+  border: 1px solid #94a3b8;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 14px;
+}
+
+button {
+  background: #0f172a;
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
