@@ -46,10 +46,17 @@ export const processCustomerMessage = async (
       ? docs.map((d) => `## ${d.title}\n${d.content}`).join("\n\n")
       : undefined;
 
-  const aiReply = await context.llmClient.generateReply(input.content, companyContext);
+  const allMessages = await context.conversationService.listMessages(input.companyId, input.conversationId);
+  const previousMessages = allMessages.slice(0, -1);
+  const conversationHistory = previousMessages.map((m) => ({
+    role: (m.role === "client" ? "user" : "assistant") as "user" | "assistant",
+    content: m.content
+  }));
+
+  const aiReply = await context.llmClient.generateReply(input.content, companyContext, conversationHistory);
   const lowConfidenceDisclaimer =
     aiReply.confidence < 0.5
-      ? "\n\n_I'm not fully confident in this answer. If you need more help, a team member can follow up._"
+      ? "\n\nI want to make sure you get the right answer — a team member can double-check and follow up if you'd like."
       : "";
   const contentToStore = aiReply.content + lowConfidenceDisclaimer;
   const aiMessage = await conversationService.addMessage(input.companyId, input.conversationId, "ai", contentToStore, {

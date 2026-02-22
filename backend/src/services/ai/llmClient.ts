@@ -9,18 +9,26 @@ export interface AiReply {
   model: string;
 }
 
+/** One turn in the conversation for context. role is OpenAI-style user/assistant. */
+export interface ConversationTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+const SUPPORT_PERSONA_NAME = "KLEO";
+
 const fallbackReply = (prompt: string): string => {
   const lc = prompt.toLowerCase();
 
   if (lc.includes("refund") || lc.includes("billing")) {
-    return "I can help with billing questions. I am escalating this to the billing team for a detailed follow-up.";
+    return "I’m sorry that’s been frustrating. I’ve flagged this for our billing team so they can look into it and get back to you with a clear answer.";
   }
 
   if (lc.includes("error") || lc.includes("failed")) {
-    return "I can see this is blocking your workflow. Please share the exact error text, and I will route this to the support team if needed.";
+    return "I want to make sure we fix this. Can you paste the exact error message or a screenshot? That will help me route you to the right person or solution right away.";
   }
 
-  return "Thanks for sharing the details. I have noted your request and can continue helping here.";
+  return "Thanks for getting in touch. I’ve noted this and I’m here to help — could you share a bit more so we can get it resolved?";
 };
 
 export class LlmClient {
@@ -46,7 +54,11 @@ export class LlmClient {
     this.baseUrl = process.env.AI_BASE_URL ?? "https://api.openai.com/v1";
   }
 
-  async generateReply(message: string, companyContext?: string): Promise<AiReply> {
+  async generateReply(
+    message: string,
+    companyContext?: string,
+    conversationHistory?: ConversationTurn[]
+  ): Promise<AiReply> {
     const start = Date.now();
 
     if (!this.apiKey) {
@@ -61,14 +73,26 @@ export class LlmClient {
     }
 
     const systemParts = [
-      "You are a customer success AI assistant. Be concise, avoid fabricated claims, and escalate when uncertain."
+      `You are ${SUPPORT_PERSONA_NAME}, a customer success support agent. Your role is to help the customer resolve their issue.`,
+      "Be empathetic and clear: acknowledge their issue first, show you're there to solve it, then give concrete steps or offer to escalate.",
+      "Use a warm, professional tone. Do not make up information; if unsure, say so and offer to have a team member follow up.",
+      "Keep replies concise but complete. Stay on-topic."
     ];
     if (companyContext && companyContext.trim()) {
       systemParts.push(
-        "\n\nUse the following company knowledge when answering. Base your answers on this when relevant:\n\n" +
+        "\n\nUse the company knowledge below when relevant to answer; otherwise be helpful and offer to escalate.\n\n" +
           companyContext.trim()
       );
     }
+
+    const maxHistoryTurns = 10;
+    const history = (conversationHistory ?? []).slice(-maxHistoryTurns);
+
+    const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+      { role: "system", content: systemParts.join("\n\n") },
+      ...history,
+      { role: "user", content: message }
+    ];
 
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: "POST",
@@ -79,16 +103,7 @@ export class LlmClient {
       body: JSON.stringify({
         model: this.model,
         temperature: 0.2,
-        messages: [
-          {
-            role: "system",
-            content: systemParts.join("")
-          },
-          {
-            role: "user",
-            content: message
-          }
-        ]
+        messages
       })
     });
 

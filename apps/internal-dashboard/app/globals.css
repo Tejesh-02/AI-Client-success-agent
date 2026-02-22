@@ -1,8 +1,10 @@
+@import "tailwindcss";
+
 :root {
   --bg: #f8fafc;
   --text: #0f172a;
   --panel: #ffffff;
-  --border: #cbd5e1;
+  --border: #e2e8f0;
 }
 
 * {
@@ -11,29 +13,17 @@
 
 body {
   margin: 0;
-  background: radial-gradient(circle at top, #dbeafe 0%, #f8fafc 45%);
   color: var(--text);
-  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
 }
 
-main {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 24px 16px 42px;
-}
-
+/* Legacy panel/table/badge for sections not yet migrated to Tailwind */
 .panel {
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--panel);
   padding: 14px;
   margin-bottom: 14px;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
 }
 
 .table {
@@ -83,22 +73,133 @@ main {
   flex-wrap: wrap;
 }
 
-input,
-select,
-button {
-  border: 1px solid #94a3b8;
-  border-radius: 8px;
-  padding: 7px 10px;
-  font-size: 14px;
+/* Form styling – inputs, labels, buttons */
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
 }
 
-button {
+.form-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.form-input,
+.form-textarea,
+.form-select {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.form-input:focus,
+.form-textarea:focus,
+.form-select:focus {
+  outline: none;
+  border-color: #64748b;
+  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.15);
+}
+
+.form-input::placeholder,
+.form-textarea::placeholder {
+  color: #94a3b8;
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+.form-select {
+  cursor: pointer;
+  appearance: auto;
+}
+
+.form-checkbox-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.form-checkbox {
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  cursor: pointer;
+  accent-color: #0f172a;
+}
+
+.btn-form {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  border: 1px solid transparent;
+}
+
+.btn-form:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-form-primary {
   background: #0f172a;
   color: #fff;
+  border-color: #0f172a;
 }
 
-@media (max-width: 900px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
+.btn-form-primary:hover:not(:disabled) {
+  background: #1e293b;
+  border-color: #1e293b;
+}
+
+.btn-form-secondary {
+  background: #fff;
+  color: #334155;
+  border-color: var(--border);
+}
+
+.btn-form-secondary:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.form-card {
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: #fafafa;
+}
+
+.form-card h4 {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
 }

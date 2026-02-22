@@ -1,15 +1,15 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type {
   CompanyDocumentSummary,
   ConversationSummary,
-  InternalLoginRequest,
-  InternalLoginResponse,
   TicketSeverity,
   TicketStatus,
   TicketSummary
 } from "@clientpulse/types";
+import { OnboardingWizard } from "./OnboardingWizard";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 const defaultCompanySlug = process.env.NEXT_PUBLIC_COMPANY_SLUG ?? "acme";
@@ -110,62 +110,73 @@ function IssueTypeEditForm({
   };
 
   return (
-    <div style={{ marginTop: "1rem", padding: "1rem", border: "1px solid #ccc", borderRadius: "8px" }}>
+    <div className="form-card" style={{ maxWidth: "420px" }}>
       <h4>Edit: {issueType.label}</h4>
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxWidth: "400px" }}>
-        <label>
-          Primary email
-          <input
-            value={primaryEmail}
-            onChange={(e) => setPrimaryEmail(e.target.value)}
-            placeholder="support@company.com"
-            style={{ display: "block", width: "100%", padding: "0.5rem" }}
-          />
-        </label>
-        <label>
-          CC (comma-separated)
-          <input
-            value={ccEmails}
-            onChange={(e) => setCcEmails(e.target.value)}
-            placeholder="manager@company.com, team@company.com"
-            style={{ display: "block", width: "100%", padding: "0.5rem" }}
-          />
-        </label>
-        <label>
-          SLA (hours)
-          <input
-            type="number"
-            min={0}
-            value={slaHours}
-            onChange={(e) => setSlaHours(e.target.value)}
-            style={{ display: "block", width: "100%", padding: "0.5rem" }}
-          />
-        </label>
-        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-          Enabled
-        </label>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button type="button" onClick={() => void handleSave()} disabled={saving}>
-            {saving ? "Saving…" : "Save"}
-          </button>
-          <button type="button" onClick={onCancel}>
-            Cancel
-          </button>
-        </div>
+      <div className="form-field">
+        <label className="form-label" htmlFor="edit-primary-email">Primary email</label>
+        <input
+          id="edit-primary-email"
+          className="form-input"
+          value={primaryEmail}
+          onChange={(e) => setPrimaryEmail(e.target.value)}
+          placeholder="support@company.com"
+          type="email"
+        />
+      </div>
+      <div className="form-field">
+        <label className="form-label" htmlFor="edit-cc">CC (comma-separated)</label>
+        <input
+          id="edit-cc"
+          className="form-input"
+          value={ccEmails}
+          onChange={(e) => setCcEmails(e.target.value)}
+          placeholder="manager@company.com, team@company.com"
+        />
+      </div>
+      <div className="form-field">
+        <label className="form-label" htmlFor="edit-sla">SLA (hours)</label>
+        <input
+          id="edit-sla"
+          className="form-input"
+          type="number"
+          min={0}
+          value={slaHours}
+          onChange={(e) => setSlaHours(e.target.value)}
+        />
+      </div>
+      <div className="form-checkbox-wrap">
+        <input
+          id="edit-enabled"
+          type="checkbox"
+          className="form-checkbox"
+          checked={enabled}
+          onChange={(e) => setEnabled(e.target.checked)}
+        />
+        <label className="form-label" htmlFor="edit-enabled" style={{ marginBottom: 0 }}>Enabled</label>
+      </div>
+      <div className="form-actions">
+        <button type="button" className="btn-form btn-form-primary" onClick={() => void handleSave()} disabled={saving}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+        <button type="button" className="btn-form btn-form-secondary" onClick={onCancel}>
+          Cancel
+        </button>
       </div>
     </div>
   );
 }
 
-export const DashboardClient = () => {
-  const [token, setTokenState] = useState<string | null>(null);
+interface DashboardClientProps {
+  token: string;
+  setToken: (token: string | null) => void;
+}
+
+export const DashboardClient = ({ token, setToken: setTokenState }: DashboardClientProps) => {
+  const pathname = usePathname();
+  const section = (pathname?.replace(/^\//, "") || "overview").split("/")[0] as string;
+
   const [currentUser, setCurrentUser] = useState<{ id: string; role: string } | null>(null);
-  const [companySlug, setCompanySlug] = useState(defaultCompanySlug);
-  const [email, setEmail] = useState("manager@acme.test");
-  const [password, setPassword] = useState("password123");
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [authBusy, setAuthBusy] = useState(false);
+  const [companySlug] = useState(defaultCompanySlug);
 
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -179,6 +190,7 @@ export const DashboardClient = () => {
     { id: string; role: string; content: string; createdAt: string; confidenceScore?: number; kbArticleIds?: string[] }[]
   >([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [messagesError, setMessagesError] = useState<string | null>(null);
 
   const [documents, setDocuments] = useState<CompanyDocumentSummary[]>([]);
   const [docTitle, setDocTitle] = useState("");
@@ -192,6 +204,7 @@ export const DashboardClient = () => {
   >([]);
   const [ticketCommentContent, setTicketCommentContent] = useState("");
   const [ticketCommentsLoading, setTicketCommentsLoading] = useState(false);
+  const [ticketCommentsError, setTicketCommentsError] = useState<string | null>(null);
   const [ticketCommentSubmitting, setTicketCommentSubmitting] = useState(false);
   const [ticketTranscript, setTicketTranscript] = useState<{ role: string; content: string; createdAt: string }[]>([]);
   const [ticketTranscriptLoading, setTicketTranscriptLoading] = useState(false);
@@ -200,6 +213,7 @@ export const DashboardClient = () => {
     { id: string; actorType: string; actorId: string; action: string; resourceType: string; resourceId: string; createdAt: string }[]
   >([]);
   const [auditLogsLoading, setAuditLogsLoading] = useState(false);
+  const [auditLogsError, setAuditLogsError] = useState<string | null>(null);
   const [auditLogResourceFilter, setAuditLogResourceFilter] = useState("");
   const [auditLogActionFilter, setAuditLogActionFilter] = useState("");
 
@@ -226,10 +240,12 @@ export const DashboardClient = () => {
     { conversationId: string; messageId: string; contentPreview: string; confidence: number | null; kbArticleIds: string[]; createdAt: string }[]
   >([]);
   const [knowledgeGapsLoading, setKnowledgeGapsLoading] = useState(false);
+  const [knowledgeGapsError, setKnowledgeGapsError] = useState<string | null>(null);
 
   const canViewWebhooks = currentUser?.role === "admin" || getStoredUser()?.role === "admin";
   const [webhookConfigs, setWebhookConfigs] = useState<{ id: string; url: string; events: string[]; enabled: boolean }[]>([]);
   const [webhookEvents, setWebhookEvents] = useState<{ id: string; configId: string; event: string; status: string; lastError: string | null; createdAt: string }[]>([]);
+  const [webhooksError, setWebhooksError] = useState<string | null>(null);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
   const [webhookEventsList, setWebhookEventsList] = useState<string[]>(["ticket.created", "ticket.updated"]);
@@ -237,58 +253,13 @@ export const DashboardClient = () => {
   const [analyticsSummary, setAnalyticsSummary] = useState<{ conversationsCount: number; ticketsRaised: number; ticketsResolved: number; aiResolutionRate: number } | null>(null);
 
   const [onboarding, setOnboarding] = useState<{ stepsDone: string[]; isProfileComplete: boolean; canGoLive: boolean } | null>(null);
+  const [goLiveBusy, setGoLiveBusy] = useState(false);
+  const [goLiveError, setGoLiveError] = useState<string | null>(null);
 
   useEffect(() => {
     setTokenState(getToken());
     setCurrentUser(getStoredUser());
   }, []);
-
-  const login = async () => {
-    setAuthBusy(true);
-    setAuthError(null);
-
-    try {
-      const payload: InternalLoginRequest = {
-        companySlug,
-        email,
-        password
-      };
-
-      const response = await fetch(`${API_URL}/internal/v1/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({ error: "Login failed" }));
-        throw new Error(data.error ?? "Login failed");
-      }
-
-      const data = (await response.json()) as InternalLoginResponse;
-      setToken(data.token);
-      setTokenState(data.token);
-      const user = { id: data.user.id, role: data.user.role };
-      setCurrentUser(user);
-      setStoredUser(user);
-      setError(null);
-    } catch (loginError) {
-      setAuthError(loginError instanceof Error ? loginError.message : "Login failed");
-    } finally {
-      setAuthBusy(false);
-    }
-  };
-
-  const logout = () => {
-    setToken(null);
-    setTokenState(null);
-    setCurrentUser(null);
-    setStoredUser(null);
-    setTickets([]);
-    setConversations([]);
-  };
 
   const load = async () => {
     if (!token) {
@@ -346,7 +317,9 @@ export const DashboardClient = () => {
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Failed to fetch dashboard data");
       if (requestError instanceof Error && requestError.message.toLowerCase().includes("token")) {
-        logout();
+        setTokenState(null);
+        setCurrentUser(null);
+        setStoredUser(null);
       }
     } finally {
       setLoading(false);
@@ -364,6 +337,7 @@ export const DashboardClient = () => {
   const loadAuditLogs = async () => {
     if (!token) return;
     setAuditLogsLoading(true);
+    setAuditLogsError(null);
     try {
       const params = new URLSearchParams();
       if (auditLogResourceFilter) params.set("resourceType", auditLogResourceFilter);
@@ -374,8 +348,9 @@ export const DashboardClient = () => {
         total: number;
       }>(`/internal/v1/audit-logs?${params.toString()}`, token);
       setAuditLogs(data.items);
-    } catch {
+    } catch (e) {
       setAuditLogs([]);
+      setAuditLogsError(e instanceof Error ? e.message : "Failed to load audit log");
     } finally {
       setAuditLogsLoading(false);
     }
@@ -385,6 +360,7 @@ export const DashboardClient = () => {
 
   const loadWebhooks = async () => {
     if (!token || !canViewWebhooks) return;
+    setWebhooksError(null);
     try {
       const [configsRes, eventsRes] = await Promise.all([
         fetchJson<{ items: { id: string; url: string; events: string[]; enabled: boolean }[] }>("/internal/v1/webhook-configs", token),
@@ -392,9 +368,10 @@ export const DashboardClient = () => {
       ]);
       setWebhookConfigs(configsRes.items ?? []);
       setWebhookEvents(eventsRes.items ?? []);
-    } catch {
+    } catch (e) {
       setWebhookConfigs([]);
       setWebhookEvents([]);
+      setWebhooksError(e instanceof Error ? e.message : "Failed to load webhooks");
     }
   };
 
@@ -405,13 +382,15 @@ export const DashboardClient = () => {
   const loadKnowledgeGaps = async () => {
     if (!token || !canManageKbSection) return;
     setKnowledgeGapsLoading(true);
+    setKnowledgeGapsError(null);
     try {
       const data = await fetchJson<{
         items: { conversationId: string; messageId: string; contentPreview: string; confidence: number | null; kbArticleIds: string[]; createdAt: string }[];
       }>("/internal/v1/analytics/knowledge-gaps?threshold=0.5", token);
       setKnowledgeGaps(data.items);
-    } catch {
+    } catch (e) {
       setKnowledgeGaps([]);
+      setKnowledgeGapsError(e instanceof Error ? e.message : "Failed to load knowledge gaps");
     } finally {
       setKnowledgeGapsLoading(false);
     }
@@ -439,14 +418,16 @@ export const DashboardClient = () => {
     if (!token) return;
     setSelectedConversationId(conversationId);
     setMessagesLoading(true);
+    setMessagesError(null);
     setConversationMessages([]);
     try {
       const data = await fetchJson<{
         items: { id: string; role: string; content: string; createdAt: string; confidenceScore?: number; kbArticleIds?: string[] }[];
       }>(`/internal/v1/conversations/${conversationId}/messages`, token);
       setConversationMessages(data.items);
-    } catch {
+    } catch (e) {
       setConversationMessages([]);
+      setMessagesError(e instanceof Error ? e.message : "Failed to load messages");
     } finally {
       setMessagesLoading(false);
     }
@@ -520,13 +501,15 @@ export const DashboardClient = () => {
   const loadTicketComments = async (ticketId: string) => {
     if (!token) return;
     setTicketCommentsLoading(true);
+    setTicketCommentsError(null);
     try {
       const data = await fetchJson<{
         items: { id: string; ticketId: string; userId: string; content: string; mentionedUserIds: string[]; createdAt: string }[];
       }>(`/internal/v1/tickets/${ticketId}/comments`, token);
       setTicketComments(data.items);
-    } catch {
+    } catch (e) {
       setTicketComments([]);
+      setTicketCommentsError(e instanceof Error ? e.message : "Failed to load comments");
     } finally {
       setTicketCommentsLoading(false);
     }
@@ -556,6 +539,7 @@ export const DashboardClient = () => {
   const selectTicket = (ticketId: string | null) => {
     setSelectedTicketId(ticketId);
     setTicketCommentContent("");
+    setTicketCommentsError(null);
     if (ticketId) {
       void loadTicketComments(ticketId);
       const t = tickets.find((x) => x.id === ticketId);
@@ -585,166 +569,131 @@ export const DashboardClient = () => {
     }
   };
 
-  if (!token) {
-    return (
-      <section className="panel">
-        <h2>Internal Login</h2>
-        <p>Use email and password to access the dashboard.</p>
-        <div className="controls" style={{ flexDirection: "column", alignItems: "stretch" }}>
-          <input
-            value={companySlug}
-            onChange={(event) => setCompanySlug(event.target.value)}
-            placeholder="company slug"
-            aria-label="company slug"
-          />
-          <input
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="email"
-            aria-label="email"
-            type="email"
-          />
-          <input
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="password"
-            aria-label="password"
-            type="password"
-          />
-          <button onClick={() => void login()} disabled={authBusy}>
-            {authBusy ? "Signing in..." : "Sign in"}
-          </button>
-          {authError ? <p>{authError}</p> : null}
-        </div>
-      </section>
-    );
-  }
-
-  const ONBOARDING_STEPS = [
-    { key: "profile", label: "Company Profile" },
-    { key: "knowledge_base", label: "Knowledge Base" },
-    { key: "routing", label: "Routing Config" },
-    { key: "team_invite", label: "Team Invite" },
-    { key: "test_chat", label: "Test Chat" }
-  ];
-
   return (
-    <div className="grid">
-      {onboarding && !onboarding.isProfileComplete ? (
-      <section className="panel" style={{ gridColumn: "1 / -1", background: "#f0f9ff", border: "1px solid #0ea5e9" }}>
-        <h2>Onboarding</h2>
-        <p style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
-          Complete these steps to go live. Minimum: Company Profile and Knowledge Base.
-        </p>
-        <ul style={{ listStyle: "none", padding: 0, display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-          {ONBOARDING_STEPS.map((s) => (
-            <li key={s.key} style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
-              <span style={{ textDecoration: onboarding.stepsDone.includes(s.key) ? "line-through" : undefined }}>{s.label}</span>
-              {!onboarding.stepsDone.includes(s.key) ? (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!token) return;
-                    await fetchJson("/internal/v1/onboarding", token, { method: "PATCH", body: JSON.stringify({ completeStep: s.key }) });
-                    const next = await fetchJson<{ stepsDone: string[]; isProfileComplete: boolean; canGoLive: boolean }>("/internal/v1/onboarding", token);
-                    setOnboarding(next);
-                  }}
-                >
-                  Mark done
-                </button>
-              ) : (
-                <span style={{ color: "green" }}>Done</span>
-              )}
-            </li>
-          ))}
-        </ul>
-        <div style={{ marginTop: "0.5rem" }}>
-          <button
-            type="button"
-            disabled={!onboarding.canGoLive}
-            onClick={async () => {
+    <div className="space-y-6">
+      {section === "overview" && (
+        <>
+        {onboarding && !onboarding.isProfileComplete ? (
+          <OnboardingWizard
+            stepsDone={onboarding.stepsDone}
+            canGoLive={onboarding.canGoLive}
+            onCompleteStep={async (key) => {
+              if (!token) return;
+              await fetchJson("/internal/v1/onboarding", token, { method: "PATCH", body: JSON.stringify({ completeStep: key }) });
+              const next = await fetchJson<{ stepsDone: string[]; isProfileComplete: boolean; canGoLive: boolean }>("/internal/v1/onboarding", token);
+              setOnboarding(next);
+            }}
+            onGoLive={async () => {
               if (!token || !onboarding.canGoLive) return;
+              setGoLiveBusy(true);
+              setGoLiveError(null);
               try {
                 await fetchJson("/internal/v1/onboarding", token, { method: "PATCH", body: JSON.stringify({ goLive: true }) });
                 const next = await fetchJson<{ stepsDone: string[]; isProfileComplete: boolean; canGoLive: boolean }>("/internal/v1/onboarding", token);
                 setOnboarding(next);
                 void load();
               } catch (e) {
-                setError(e instanceof Error ? e.message : "Go live failed");
+                setGoLiveError(e instanceof Error ? e.message : "Go live failed");
+              } finally {
+                setGoLiveBusy(false);
               }
             }}
-          >
-            Go Live
-          </button>
-          {!onboarding.canGoLive ? <span style={{ marginLeft: "0.5rem", fontSize: "0.9rem", color: "#666" }}>Complete Profile and Knowledge Base first.</span> : null}
-        </div>
-      </section>
-      ) : null}
-
-      <section className="panel">
-        <h2>Operational Summary</h2>
-        <p>Conversations: {conversations.length}</p>
-        <p>Tickets: {tickets.length}</p>
-        <p>Emergency Tickets: {emergencyCount}</p>
-        {analyticsSummary ? (
-          <>
-            <p>Tickets resolved: {analyticsSummary.ticketsResolved}</p>
-            <p>AI resolution rate: {analyticsSummary.aiResolutionRate}% (no ticket raised)</p>
-          </>
+            goLiveError={goLiveError}
+            goLiveBusy={goLiveBusy}
+          />
         ) : null}
 
-        <div className="controls">
-          <label htmlFor="severityFilter">Severity Filter</label>
-          <select
-            id="severityFilter"
-            value={severityFilter}
-            onChange={(event) => setSeverityFilter(event.target.value)}
-          >
-            <option value="">All</option>
-            {severityOptions.map((severity) => (
-              <option key={severity} value={severity}>
-                {severity}
-              </option>
-            ))}
-          </select>
-          <button onClick={() => void load()}>Refresh</button>
-          <button onClick={logout}>Logout</button>
-        </div>
+        <section id="overview" className="scroll-mt-4">
+          <h2 className="mb-4 text-lg font-semibold text-slate-900">Overview</h2>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-sm text-slate-500">Conversations</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">{conversations.length}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-sm text-slate-500">Tickets</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">{tickets.length}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-sm text-slate-500">Emergency</p>
+              <p className="mt-1 text-2xl font-semibold text-red-600">{emergencyCount}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-sm text-slate-500">AI resolution rate</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">{analyticsSummary ? `${analyticsSummary.aiResolutionRate}%` : "—"}</p>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap items-end gap-3">
+            <div className="form-field" style={{ marginBottom: 0 }}>
+              <label htmlFor="severityFilter" className="form-label">Severity</label>
+              <select
+                id="severityFilter"
+                value={severityFilter}
+                onChange={(e) => setSeverityFilter(e.target.value)}
+                className="form-select"
+                style={{ minWidth: "120px" }}
+              >
+                <option value="">All</option>
+                {severityOptions.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              className="btn-form btn-form-primary"
+              onClick={() => void load()}
+            >
+              Refresh
+            </button>
+          </div>
+          {loading ? <p className="mt-2 text-sm text-slate-500">Loading…</p> : null}
+          {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
+        </section>
+        </>
+      )}
 
-        {loading ? <p>Loading...</p> : null}
-        {error ? <p>{error}</p> : null}
-      </section>
-
-      {canManageKbSection ? (
-      <section className="panel">
+      {section === "knowledge" && canManageKbSection ? (
+      <section id="knowledge" className="panel scroll-mt-4">
         <h2>Company knowledge</h2>
-        <p style={{ fontSize: "0.9rem", marginBottom: "1rem" }}>
+        <p className="text-sm text-slate-600 mb-4">
           Documents here are sent to the AI as context so it can answer using your product/company info.
         </p>
-        <div style={{ marginBottom: "1rem" }}>
-          <input
-            value={docTitle}
-            onChange={(e) => setDocTitle(e.target.value)}
-            placeholder="Document title (e.g. FAQ, Product guide)"
-            style={{ width: "100%", marginBottom: "0.5rem", padding: "0.5rem" }}
-            aria-label="Document title"
-          />
-          <textarea
-            value={docContent}
-            onChange={(e) => setDocContent(e.target.value)}
-            placeholder="Paste or type content the AI should use when answering customers..."
-            rows={4}
-            style={{ width: "100%", padding: "0.5rem", resize: "vertical" }}
-            aria-label="Document content"
-          />
-          <button
-            type="button"
-            onClick={() => void addDocument()}
-            disabled={docSaving || !docTitle.trim() || !docContent.trim()}
-            style={{ marginTop: "0.5rem" }}
-          >
-            {docSaving ? "Adding…" : "Add document"}
-          </button>
+        <div className="form-card">
+          <h4>Add document</h4>
+          <div className="form-field">
+            <label className="form-label" htmlFor="doc-title">Document title</label>
+            <input
+              id="doc-title"
+              className="form-input"
+              value={docTitle}
+              onChange={(e) => setDocTitle(e.target.value)}
+              placeholder="e.g. FAQ, Product guide"
+              aria-label="Document title"
+            />
+          </div>
+          <div className="form-field">
+            <label className="form-label" htmlFor="doc-content">Content</label>
+            <textarea
+              id="doc-content"
+              className="form-textarea"
+              value={docContent}
+              onChange={(e) => setDocContent(e.target.value)}
+              placeholder="Paste or type content the AI should use when answering customers..."
+              rows={4}
+              aria-label="Document content"
+            />
+          </div>
+          <div className="form-actions">
+            <button
+              type="button"
+              className="btn-form btn-form-primary"
+              onClick={() => void addDocument()}
+              disabled={docSaving || !docTitle.trim() || !docContent.trim()}
+            >
+              {docSaving ? "Adding…" : "Add document"}
+            </button>
+          </div>
         </div>
         <ul style={{ listStyle: "none", padding: 0 }}>
           {documents.map((doc) => (
@@ -769,6 +718,7 @@ export const DashboardClient = () => {
               </div>
               <button
                 type="button"
+                className="btn-form btn-form-secondary"
                 onClick={() => void deleteDocument(doc.id)}
                 style={{ marginLeft: "0.5rem", fontSize: "0.85rem" }}
               >
@@ -783,8 +733,8 @@ export const DashboardClient = () => {
       </section>
       ) : null}
 
-      {canManageKbSection ? (
-      <section className="panel">
+      {section === "routing" && canManageKbSection ? (
+      <section id="routing" className="panel scroll-mt-4">
         <h2>Routing (issue types)</h2>
         <p style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
           Configure primary email, CC, and SLA per issue type. Used when tickets are created.
@@ -832,46 +782,57 @@ export const DashboardClient = () => {
                 onCancel={() => setEditingIssueTypeId(null)}
               />
             ) : null}
-            <div style={{ marginTop: "1rem" }}>
+            <div className="form-card">
               <h4>Add custom issue type</h4>
-              <input
-                value={newIssueTypeCode}
-                onChange={(e) => setNewIssueTypeCode(e.target.value)}
-                placeholder="Code (e.g. custom_support)"
-                style={{ marginRight: "0.5rem", padding: "0.5rem" }}
-              />
-              <input
-                value={newIssueTypeLabel}
-                onChange={(e) => setNewIssueTypeLabel(e.target.value)}
-                placeholder="Label"
-                style={{ marginRight: "0.5rem", padding: "0.5rem" }}
-              />
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!token || !newIssueTypeCode.trim() || !newIssueTypeLabel.trim()) return;
-                  try {
-                    await fetchJson("/internal/v1/issue-types", token, {
-                      method: "POST",
-                      body: JSON.stringify({ code: newIssueTypeCode.trim(), label: newIssueTypeLabel.trim() })
-                    });
-                    setNewIssueTypeCode("");
-                    setNewIssueTypeLabel("");
-                    void load();
-                  } catch (e) {
-                    setError(e instanceof Error ? e.message : "Failed to add issue type");
-                  }
-                }}
-              >
-                Add
-              </button>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
+                <div className="form-field" style={{ flex: "1 1 180px", marginBottom: 0 }}>
+                  <label className="form-label" htmlFor="new-issue-code">Code</label>
+                  <input
+                    id="new-issue-code"
+                    className="form-input"
+                    value={newIssueTypeCode}
+                    onChange={(e) => setNewIssueTypeCode(e.target.value)}
+                    placeholder="e.g. custom_support"
+                  />
+                </div>
+                <div className="form-field" style={{ flex: "1 1 180px", marginBottom: 0 }}>
+                  <label className="form-label" htmlFor="new-issue-label">Label</label>
+                  <input
+                    id="new-issue-label"
+                    className="form-input"
+                    value={newIssueTypeLabel}
+                    onChange={(e) => setNewIssueTypeLabel(e.target.value)}
+                    placeholder="Display name"
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="btn-form btn-form-primary"
+                  onClick={async () => {
+                    if (!token || !newIssueTypeCode.trim() || !newIssueTypeLabel.trim()) return;
+                    try {
+                      await fetchJson("/internal/v1/issue-types", token, {
+                        method: "POST",
+                        body: JSON.stringify({ code: newIssueTypeCode.trim(), label: newIssueTypeLabel.trim() })
+                      });
+                      setNewIssueTypeCode("");
+                      setNewIssueTypeLabel("");
+                      void load();
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : "Failed to add issue type");
+                    }
+                  }}
+                >
+                  Add
+                </button>
+              </div>
             </div>
           </>
       </section>
       ) : null}
 
-      {canManageKbSection ? (
-      <section className="panel">
+      {section === "escalation" && canManageKbSection ? (
+      <section id="escalation" className="panel scroll-mt-4">
         <h2>Escalation rules</h2>
         <p style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
           When a rule matches (e.g. keyword, sentiment), ticket severity or assignee can be overridden.
@@ -913,43 +874,62 @@ export const DashboardClient = () => {
             ))}
           </tbody>
         </table>
-        <div style={{ marginTop: "1rem" }}>
+        <div className="form-card">
           <h4>Add rule</h4>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
-            <input
-              value={newEscalationName}
-              onChange={(e) => setNewEscalationName(e.target.value)}
-              placeholder="Rule name"
-              style={{ padding: "0.5rem" }}
-            />
-            <select
-              value={newEscalationTrigger}
-              onChange={(e) => setNewEscalationTrigger(e.target.value)}
-              style={{ padding: "0.5rem" }}
-            >
-              <option value="keyword">Keyword</option>
-              <option value="sentiment">Sentiment</option>
-              <option value="churn">Churn (always Critical)</option>
-            </select>
-            {newEscalationTrigger === "keyword" ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
+            <div className="form-field" style={{ flex: "1 1 160px", marginBottom: 0 }}>
+              <label className="form-label" htmlFor="new-rule-name">Rule name</label>
               <input
-                value={newEscalationKeywords}
-                onChange={(e) => setNewEscalationKeywords(e.target.value)}
-                placeholder="Keywords (comma-separated)"
-                style={{ padding: "0.5rem", minWidth: "200px" }}
+                id="new-rule-name"
+                className="form-input"
+                value={newEscalationName}
+                onChange={(e) => setNewEscalationName(e.target.value)}
+                placeholder="Rule name"
               />
+            </div>
+            <div className="form-field" style={{ flex: "0 1 auto", marginBottom: 0 }}>
+              <label className="form-label" htmlFor="new-rule-trigger">Trigger</label>
+              <select
+                id="new-rule-trigger"
+                className="form-select"
+                value={newEscalationTrigger}
+                onChange={(e) => setNewEscalationTrigger(e.target.value)}
+                style={{ minWidth: "120px" }}
+              >
+                <option value="keyword">Keyword</option>
+                <option value="sentiment">Sentiment</option>
+                <option value="churn">Churn (always Critical)</option>
+              </select>
+            </div>
+            {newEscalationTrigger === "keyword" ? (
+              <div className="form-field" style={{ flex: "1 1 200px", marginBottom: 0 }}>
+                <label className="form-label" htmlFor="new-rule-keywords">Keywords (comma-separated)</label>
+                <input
+                  id="new-rule-keywords"
+                  className="form-input"
+                  value={newEscalationKeywords}
+                  onChange={(e) => setNewEscalationKeywords(e.target.value)}
+                  placeholder="e.g. urgent, asap"
+                />
+              </div>
             ) : null}
-            <select
-              value={newEscalationImportance}
-              onChange={(e) => setNewEscalationImportance(e.target.value)}
-              style={{ padding: "0.5rem" }}
-            >
-              {severityOptions.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+            <div className="form-field" style={{ flex: "0 1 auto", marginBottom: 0 }}>
+              <label className="form-label" htmlFor="new-rule-importance">Importance</label>
+              <select
+                id="new-rule-importance"
+                className="form-select"
+                value={newEscalationImportance}
+                onChange={(e) => setNewEscalationImportance(e.target.value)}
+                style={{ minWidth: "100px" }}
+              >
+                {severityOptions.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
             <button
               type="button"
+              className="btn-form btn-form-primary"
               onClick={async () => {
                 if (!token || !newEscalationName.trim()) return;
                 try {
@@ -978,8 +958,8 @@ export const DashboardClient = () => {
       </section>
       ) : null}
 
-      {canManageKbSection ? (
-      <section className="panel">
+      {section === "canned" && canManageKbSection ? (
+      <section id="canned" className="panel scroll-mt-4">
         <h2>Canned responses</h2>
         <p style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
           Reusable reply templates. Use &quot;Insert canned…&quot; in ticket comments to paste one.
@@ -1017,44 +997,58 @@ export const DashboardClient = () => {
             ))}
           </tbody>
         </table>
-        <div style={{ marginTop: "1rem" }}>
-          <input
-            value={newCannedTitle}
-            onChange={(e) => setNewCannedTitle(e.target.value)}
-            placeholder="Title"
-            style={{ marginRight: "0.5rem", padding: "0.5rem" }}
-          />
-          <textarea
-            value={newCannedContent}
-            onChange={(e) => setNewCannedContent(e.target.value)}
-            placeholder="Content"
-            rows={2}
-            style={{ marginRight: "0.5rem", padding: "0.5rem", verticalAlign: "top", minWidth: "200px" }}
-          />
-          <button
-            type="button"
-            onClick={async () => {
-              if (!token || !newCannedTitle.trim() || !newCannedContent.trim()) return;
-              try {
-                await fetchJson("/internal/v1/canned-responses", token, {
-                  method: "POST",
-                  body: JSON.stringify({ title: newCannedTitle.trim(), content: newCannedContent.trim() })
-                });
-                setNewCannedTitle("");
-                setNewCannedContent("");
-                void load();
-              } catch (e) {
-                setError(e instanceof Error ? e.message : "Failed to add");
-              }
-            }}
-          >
-            Add
-          </button>
+        <div className="form-card">
+          <h4>Add canned response</h4>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
+            <div className="form-field" style={{ flex: "1 1 180px", marginBottom: 0 }}>
+              <label className="form-label" htmlFor="new-canned-title">Title</label>
+              <input
+                id="new-canned-title"
+                className="form-input"
+                value={newCannedTitle}
+                onChange={(e) => setNewCannedTitle(e.target.value)}
+                placeholder="Short title"
+              />
+            </div>
+            <div className="form-field" style={{ flex: "2 1 240px", marginBottom: 0 }}>
+              <label className="form-label" htmlFor="new-canned-content">Content</label>
+              <textarea
+                id="new-canned-content"
+                className="form-textarea"
+                value={newCannedContent}
+                onChange={(e) => setNewCannedContent(e.target.value)}
+                placeholder="Reply template content..."
+                rows={2}
+                style={{ minHeight: "60px" }}
+              />
+            </div>
+            <button
+              type="button"
+              className="btn-form btn-form-primary"
+              onClick={async () => {
+                if (!token || !newCannedTitle.trim() || !newCannedContent.trim()) return;
+                try {
+                  await fetchJson("/internal/v1/canned-responses", token, {
+                    method: "POST",
+                    body: JSON.stringify({ title: newCannedTitle.trim(), content: newCannedContent.trim() })
+                  });
+                  setNewCannedTitle("");
+                  setNewCannedContent("");
+                  void load();
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "Failed to add");
+                }
+              }}
+            >
+              Add
+            </button>
+          </div>
         </div>
       </section>
       ) : null}
 
-      <section className="panel">
+      {section === "conversations" && (
+      <section id="conversations" className="panel scroll-mt-4">
         <h2>Conversations</h2>
         <table className="table">
           <thead>
@@ -1087,26 +1081,30 @@ export const DashboardClient = () => {
               Conversation with {selectedConversation?.clientName ?? selectedConversation?.clientId ?? "—"}
               <button
                 type="button"
+                className="btn-form btn-form-secondary"
                 onClick={() => setSelectedConversationId(null)}
-                style={{ marginLeft: "0.5rem", fontSize: "0.9rem" }}
+                style={{ marginLeft: "0.5rem" }}
+                aria-label="Close conversation panel"
               >
                 Close
               </button>
             </h3>
             {selectedConversation?.status === "handed_off" ? (
-              <div style={{ marginBottom: "1rem" }}>
-                <label htmlFor="agent-reply">Reply as agent (customer will see on next refresh)</label>
-                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem" }}>
+              <div className="form-field">
+                <label className="form-label" htmlFor="agent-reply">Reply as agent (customer will see on next refresh)</label>
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end" }}>
                   <textarea
                     id="agent-reply"
+                    className="form-textarea"
                     value={agentReplyContent}
                     onChange={(e) => setAgentReplyContent(e.target.value)}
                     placeholder="Type your reply..."
                     rows={2}
-                    style={{ flex: 1, padding: "0.5rem" }}
+                    style={{ flex: 1, minHeight: "60px" }}
                   />
                   <button
                     type="button"
+                    className="btn-form btn-form-primary"
                     disabled={agentReplySending || !agentReplyContent.trim()}
                     onClick={async () => {
                       if (!token || !selectedConversationId || !agentReplyContent.trim()) return;
@@ -1142,9 +1140,15 @@ export const DashboardClient = () => {
                 Take over conversation
               </button>
             ) : null}
+            {messagesError ? (
+              <>
+                <p style={{ fontSize: "0.9rem", color: "#b91c1c", marginBottom: "0.5rem" }}>{messagesError}</p>
+                <button type="button" className="btn-form btn-form-primary" onClick={() => selectedConversationId && void loadConversationMessages(selectedConversationId)}>Retry</button>
+              </>
+            ) : null}
             {messagesLoading ? (
               <p>Loading…</p>
-            ) : (
+            ) : !messagesError ? (
               <ul style={{ listStyle: "none", padding: 0 }}>
                 {conversationMessages.map((msg) => (
                   <li
@@ -1175,20 +1179,27 @@ export const DashboardClient = () => {
                   </li>
                 ))}
               </ul>
-            )}
+            ) : null}
           </div>
         ) : null}
       </section>
+      )}
 
-      {canManageKbSection ? (
-      <section className="panel" style={{ gridColumn: "1 / -1" }}>
+      {section === "gaps" && canManageKbSection ? (
+      <section id="gaps" className="panel scroll-mt-4">
         <h2>Knowledge gaps</h2>
         <p style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
           AI messages with low confidence in conversations that led to a ticket.
         </p>
-        <button type="button" onClick={() => void loadKnowledgeGaps()} disabled={knowledgeGapsLoading} style={{ marginBottom: "0.5rem" }}>
+        <button type="button" className="btn-form btn-form-primary" onClick={() => void loadKnowledgeGaps()} disabled={knowledgeGapsLoading} style={{ marginBottom: "0.5rem" }}>
           {knowledgeGapsLoading ? "Loading…" : "Refresh"}
         </button>
+        {knowledgeGapsError ? (
+          <p style={{ fontSize: "0.9rem", color: "#b91c1c", marginBottom: "0.5rem" }}>{knowledgeGapsError}</p>
+        ) : null}
+        {knowledgeGapsError ? (
+          <button type="button" className="btn-form btn-form-primary" onClick={() => void loadKnowledgeGaps()} style={{ marginBottom: "0.5rem" }}>Retry</button>
+        ) : null}
         {knowledgeGaps.length > 0 ? (
           <table className="table">
             <thead>
@@ -1218,7 +1229,8 @@ export const DashboardClient = () => {
       </section>
       ) : null}
 
-      <section className="panel" style={{ gridColumn: "1 / -1" }}>
+      {section === "tickets" && (
+      <section id="tickets" className="panel scroll-mt-4">
         <h2>Tickets</h2>
         <table className="table">
           <thead>
@@ -1269,6 +1281,7 @@ export const DashboardClient = () => {
                       type="button"
                       onClick={() => selectTicket(selectedTicketId === ticket.id ? null : ticket.id)}
                       style={{ marginRight: "0.5rem" }}
+                      aria-label={selectedTicketId === ticket.id ? "Hide comments" : "View comments"}
                     >
                       {selectedTicketId === ticket.id ? "Hide comments" : "Comments"}
                     </button>
@@ -1306,7 +1319,7 @@ export const DashboardClient = () => {
                   SLA: {new Date(selectedTicket.slaDueAt).getTime() < Date.now() ? "Overdue" : `${Math.round((new Date(selectedTicket.slaDueAt).getTime() - Date.now()) / (60 * 60 * 1000))}h left`}
                 </span>
               ) : null}
-              <button type="button" onClick={() => selectTicket(null)} style={{ marginLeft: "0.5rem", fontSize: "0.9rem" }}>
+                <button type="button" className="btn-form btn-form-secondary" onClick={() => selectTicket(null)} style={{ marginLeft: "0.5rem" }} aria-label="Close ticket panel">
                 Close
               </button>
             </h3>
@@ -1324,9 +1337,15 @@ export const DashboardClient = () => {
               </ul>
             )}
             <h4>Internal comments</h4>
+            {ticketCommentsError ? (
+              <>
+                <p style={{ fontSize: "0.9rem", color: "#b91c1c", marginBottom: "0.5rem" }}>{ticketCommentsError}</p>
+                <button type="button" className="btn-form btn-form-primary" onClick={() => selectedTicketId && void loadTicketComments(selectedTicketId)}>Retry</button>
+              </>
+            ) : null}
             {ticketCommentsLoading ? (
               <p>Loading comments…</p>
-            ) : (
+            ) : !ticketCommentsError ? (
               <>
                 <ul style={{ listStyle: "none", padding: 0, marginBottom: "1rem" }}>
                   {ticketComments.map((c) => (
@@ -1338,83 +1357,120 @@ export const DashboardClient = () => {
                     </li>
                   ))}
                 </ul>
-                <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
-                  <textarea
-                    value={ticketCommentContent}
-                    onChange={(e) => setTicketCommentContent(e.target.value)}
-                    placeholder="Add internal comment (hidden from client)"
-                    rows={2}
-                    style={{ flex: 1, padding: "0.5rem" }}
-                    aria-label="Comment"
-                  />
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                    <select
-                      aria-label="Insert canned response"
-                      style={{ padding: "0.35rem", fontSize: "0.9rem" }}
-                      value=""
-                      onChange={(e) => {
-                        const id = e.target.value;
-                        e.target.value = "";
-                        if (!id) return;
-                        const cr = cannedResponses.find((c) => c.id === id);
-                        if (cr) setTicketCommentContent((prev) => (prev ? `${prev}\n\n${cr.content}` : cr.content));
-                      }}
-                    >
-                      <option value="">Insert canned…</option>
-                      {cannedResponses.map((cr) => (
-                        <option key={cr.id} value={cr.id}>{cr.title}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => void addTicketComment()}
-                      disabled={ticketCommentSubmitting || !ticketCommentContent.trim()}
-                    >
-                      {ticketCommentSubmitting ? "Sending…" : "Add comment"}
-                    </button>
+                <div className="form-field">
+                  <label className="form-label" htmlFor="ticket-comment">Add internal comment (hidden from client)</label>
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end", flexWrap: "wrap" }}>
+                    <textarea
+                      id="ticket-comment"
+                      className="form-textarea"
+                      value={ticketCommentContent}
+                      onChange={(e) => setTicketCommentContent(e.target.value)}
+                      placeholder="Type your comment..."
+                      rows={2}
+                      style={{ flex: "1 1 200px", minHeight: "60px" }}
+                      aria-label="Comment"
+                    />
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                      <select
+                        className="form-select"
+                        aria-label="Insert canned response"
+                        value=""
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          e.target.value = "";
+                          if (!id) return;
+                          const cr = cannedResponses.find((c) => c.id === id);
+                          if (cr) setTicketCommentContent((prev) => (prev ? `${prev}\n\n${cr.content}` : cr.content));
+                        }}
+                        style={{ minWidth: "140px" }}
+                      >
+                        <option value="">Insert canned…</option>
+                        {cannedResponses.map((cr) => (
+                          <option key={cr.id} value={cr.id}>{cr.title}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="btn-form btn-form-primary"
+                        onClick={() => void addTicketComment()}
+                        disabled={ticketCommentSubmitting || !ticketCommentContent.trim()}
+                      >
+                        {ticketCommentSubmitting ? "Sending…" : "Add comment"}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </>
-            )}
+            ) : null}
           </div>
         ) : null}
       </section>
+      )}
 
-      {canViewWebhooks ? (
-      <section className="panel" style={{ gridColumn: "1 / -1" }}>
+      {section === "webhooks" && canViewWebhooks ? (
+      <section id="webhooks" className="panel scroll-mt-4">
         <h2>Webhooks (admin)</h2>
         <p style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
           Configure a URL and subscribe to events. Payloads are signed with HMAC (X-Webhook-Signature: sha256=...).
         </p>
-        <div style={{ marginBottom: "1rem" }}>
-          <input value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} placeholder="https://your-server.com/webhook" style={{ marginRight: "0.5rem", padding: "0.5rem", minWidth: "280px" }} />
-          <input type="password" value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} placeholder="Secret" style={{ marginRight: "0.5rem", padding: "0.5rem" }} />
-          <button
-            type="button"
-            onClick={async () => {
-              if (!token || !webhookUrl.trim() || !webhookSecret.trim()) return;
-              try {
-                await fetchJson("/internal/v1/webhook-configs", token, {
-                  method: "POST",
-                  body: JSON.stringify({ url: webhookUrl.trim(), secret: webhookSecret.trim(), events: webhookEventsList })
-                });
-                setWebhookUrl("");
-                setWebhookSecret("");
-                void loadWebhooks();
-              } catch (e) {
-                setError(e instanceof Error ? e.message : "Failed to add webhook");
-              }
-            }}
-          >
-            Add webhook
-          </button>
+        {webhooksError ? (
+          <>
+            <p style={{ fontSize: "0.9rem", color: "#b91c1c", marginBottom: "0.5rem" }}>{webhooksError}</p>
+            <button type="button" className="btn-form btn-form-primary" onClick={() => void loadWebhooks()} style={{ marginBottom: "1rem" }}>Retry</button>
+          </>
+        ) : null}
+        <div className="form-card">
+          <h4>Add webhook</h4>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
+            <div className="form-field" style={{ flex: "1 1 280px", marginBottom: 0 }}>
+              <label className="form-label" htmlFor="webhook-url">URL</label>
+              <input
+                id="webhook-url"
+                className="form-input"
+                value={webhookUrl}
+                onChange={(e) => setWebhookUrl(e.target.value)}
+                placeholder="https://your-server.com/webhook"
+              />
+            </div>
+            <div className="form-field" style={{ flex: "0 1 160px", marginBottom: 0 }}>
+              <label className="form-label" htmlFor="webhook-secret">Secret</label>
+              <input
+                id="webhook-secret"
+                className="form-input"
+                type="password"
+                value={webhookSecret}
+                onChange={(e) => setWebhookSecret(e.target.value)}
+                placeholder="Signing secret"
+              />
+            </div>
+            <button
+              type="button"
+              className="btn-form btn-form-primary"
+              onClick={async () => {
+                if (!token || !webhookUrl.trim() || !webhookSecret.trim()) return;
+                try {
+                  await fetchJson("/internal/v1/webhook-configs", token, {
+                    method: "POST",
+                    body: JSON.stringify({ url: webhookUrl.trim(), secret: webhookSecret.trim(), events: webhookEventsList })
+                  });
+                  setWebhookUrl("");
+                  setWebhookSecret("");
+                  void loadWebhooks();
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "Failed to add webhook");
+                }
+              }}
+            >
+              Add webhook
+            </button>
+          </div>
         </div>
         <ul style={{ listStyle: "none", padding: 0 }}>
           {webhookConfigs.map((c) => (
             <li key={c.id} style={{ marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
               <span>{c.url}</span>
               <span style={{ fontSize: "0.85em", color: "#666" }}>{c.events.join(", ")}</span>
-              <button type="button" onClick={async () => { if (token) { await fetchJson(`/internal/v1/webhook-configs/${c.id}`, token, { method: "DELETE" }); void loadWebhooks(); } }}>Delete</button>
+              <button type="button" className="btn-form btn-form-secondary" onClick={async () => { if (token) { await fetchJson(`/internal/v1/webhook-configs/${c.id}`, token, { method: "DELETE" }); void loadWebhooks(); } }} aria-label={`Delete webhook ${c.url}`}>Delete</button>
             </li>
           ))}
         </ul>
@@ -1437,43 +1493,57 @@ export const DashboardClient = () => {
       </section>
       ) : null}
 
-      {canViewAuditLog ? (
-      <section className="panel" style={{ gridColumn: "1 / -1" }}>
+      {section === "audit" && canViewAuditLog ? (
+      <section id="audit" className="panel scroll-mt-4">
         <h2>Audit log</h2>
         <p style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
           Who did what, when. Filter by resource type or action.
         </p>
-        <div className="controls" style={{ marginBottom: "1rem" }}>
-          <label htmlFor="auditResourceFilter">Resource type</label>
-          <select
-            id="auditResourceFilter"
-            value={auditLogResourceFilter}
-            onChange={(e) => setAuditLogResourceFilter(e.target.value)}
-          >
-            <option value="">All</option>
-            <option value="ticket">ticket</option>
-            <option value="ticket_comment">ticket_comment</option>
-            <option value="company_document">company_document</option>
-            <option value="session">session</option>
-            <option value="user">user</option>
-          </select>
-          <label htmlFor="auditActionFilter">Action</label>
-          <select
-            id="auditActionFilter"
-            value={auditLogActionFilter}
-            onChange={(e) => setAuditLogActionFilter(e.target.value)}
-          >
-            <option value="">All</option>
-            <option value="ticket.created.from_ai">ticket.created.from_ai</option>
-            <option value="ticket.updated">ticket.updated</option>
-            <option value="ticket.comment.created">ticket.comment.created</option>
-            <option value="company_document.created">company_document.created</option>
-            <option value="user.logged_in">user.logged_in</option>
-          </select>
-          <button type="button" onClick={() => void loadAuditLogs()} disabled={auditLogsLoading}>
+          <div className="controls" style={{ marginBottom: "1rem", alignItems: "flex-end", gap: "0.75rem" }}>
+          <div className="form-field" style={{ marginBottom: 0 }}>
+            <label className="form-label" htmlFor="auditResourceFilter">Resource type</label>
+            <select
+              id="auditResourceFilter"
+              className="form-select"
+              value={auditLogResourceFilter}
+              onChange={(e) => setAuditLogResourceFilter(e.target.value)}
+              style={{ minWidth: "140px" }}
+            >
+              <option value="">All</option>
+              <option value="ticket">ticket</option>
+              <option value="ticket_comment">ticket_comment</option>
+              <option value="company_document">company_document</option>
+              <option value="session">session</option>
+              <option value="user">user</option>
+            </select>
+          </div>
+          <div className="form-field" style={{ marginBottom: 0 }}>
+            <label className="form-label" htmlFor="auditActionFilter">Action</label>
+            <select
+              id="auditActionFilter"
+              className="form-select"
+              value={auditLogActionFilter}
+              onChange={(e) => setAuditLogActionFilter(e.target.value)}
+              style={{ minWidth: "180px" }}
+            >
+              <option value="">All</option>
+              <option value="ticket.created.from_ai">ticket.created.from_ai</option>
+              <option value="ticket.updated">ticket.updated</option>
+              <option value="ticket.comment.created">ticket.comment.created</option>
+              <option value="company_document.created">company_document.created</option>
+              <option value="user.logged_in">user.logged_in</option>
+            </select>
+          </div>
+          <button type="button" className="btn-form btn-form-primary" onClick={() => void loadAuditLogs()} disabled={auditLogsLoading}>
             {auditLogsLoading ? "Loading…" : "Refresh"}
           </button>
         </div>
+        {auditLogsError ? (
+          <>
+            <p style={{ fontSize: "0.9rem", color: "#b91c1c", marginBottom: "0.5rem" }}>{auditLogsError}</p>
+            <button type="button" className="btn-form btn-form-primary" onClick={() => void loadAuditLogs()} style={{ marginBottom: "1rem" }}>Retry</button>
+          </>
+        ) : null}
         {auditLogsLoading ? (
           <p>Loading audit log…</p>
         ) : (
