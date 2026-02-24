@@ -1,5 +1,14 @@
-import { redirect } from "next/navigation";
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 export default function DashboardIndexPage() {
-  redirect("/overview");
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/overview");
+  }, [router]);
+
+  return null;
 }

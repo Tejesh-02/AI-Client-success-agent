@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import { ChatPage } from "./pages/ChatPage.tsx";
+import { ChatPage } from "./pages/ChatPage";
 import "./styles.css";
 
 export const App = () => (

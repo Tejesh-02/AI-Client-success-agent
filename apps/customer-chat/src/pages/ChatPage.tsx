@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
+import { createCustomerSession, getTranscript, sendCustomerMessage, submitFeedback } from "../lib/api";
 
 const POLL_INTERVAL_MS = 4000;
-import { useParams } from "react-router-dom";
-import { createCustomerSession, getTranscript, sendCustomerMessage, submitFeedback } from "../lib/api.ts";
 
 interface LocalMessage {
   id: string;
