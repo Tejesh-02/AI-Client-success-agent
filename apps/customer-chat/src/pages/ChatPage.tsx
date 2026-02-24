@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+const POLL_INTERVAL_MS = 4000;
 import { useParams } from "react-router-dom";
 import { createCustomerSession, getTranscript, sendCustomerMessage, submitFeedback } from "../lib/api.ts";
 
@@ -7,14 +9,19 @@ interface LocalMessage {
   role: "client" | "ai";
   content: string;
   createdAt: string;
+  failed?: boolean;
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const AGENT_NAME = "Support";
+
 const formatTime = (iso: string) => {
   const d = new Date(iso);
   const now = new Date();
   const isToday = d.toDateString() === now.toDateString();
-  return isToday ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : d.toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+  return isToday
+    ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleString([], { dateStyle: "short", timeStyle: "short" });
 };
 
 export const ChatPage = () => {
@@ -37,44 +44,47 @@ export const ChatPage = () => {
   const messageInputRef = useRef<HTMLInputElement>(null);
 
   const canSubmitPreChat = useMemo(
-    () => name.trim().length > 0 && email.trim().length > 3,
+    () => name.trim().length > 0 && EMAIL_REGEX.test(email.trim()),
     [name, email]
   );
 
-  const refetchTranscript = useCallback(() => {
-    if (!sessionToken || !conversationId) return;
+  const loadTranscript = useCallback(async (convId: string, token: string) => {
     setError(null);
     setTranscriptLoading(true);
-    getTranscript(conversationId, sessionToken)
-      .then((items) => {
-        setMessages(
-          items
-            .filter((item): item is { id: string; role: "client" | "ai"; content: string; createdAt: string } => item.role === "client" || item.role === "ai")
-            .map((item) => ({ id: item.id, role: item.role, content: item.content, createdAt: item.createdAt }))
-        );
-      })
-      .catch((apiError: Error) => setError(apiError.message))
-      .finally(() => setTranscriptLoading(false));
-  }, [sessionToken, conversationId]);
+    try {
+      const items = await getTranscript(convId, token);
+      setMessages(
+        items
+          .filter((item): item is { id: string; role: "client" | "ai"; content: string; createdAt: string } =>
+            item.role === "client" || item.role === "ai"
+          )
+          .map((item) => ({ id: item.id, role: item.role, content: item.content, createdAt: item.createdAt }))
+      );
+    } catch (apiError) {
+      setError(apiError instanceof Error ? apiError.message : "Failed to load conversation");
+    } finally {
+      setTranscriptLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (!sessionToken || !conversationId) return;
-    setTranscriptLoading(true);
-    getTranscript(conversationId, sessionToken)
-      .then((items) => {
-        setMessages(
-          items
-            .filter((item): item is { id: string; role: "client" | "ai"; content: string; createdAt: string } => item.role === "client" || item.role === "ai")
-            .map((item) => ({ id: item.id, role: item.role, content: item.content, createdAt: item.createdAt }))
-        );
-      })
-      .catch((apiError: Error) => setError(apiError.message))
-      .finally(() => setTranscriptLoading(false));
-  }, [sessionToken, conversationId]);
+    if (sessionToken && conversationId) {
+      void loadTranscript(conversationId, sessionToken);
+    }
+  }, [sessionToken, conversationId, loadTranscript]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, submitting]);
+
+  // Poll for new messages (catches agent replies in handed-off conversations).
+  useEffect(() => {
+    if (!sessionToken || !conversationId || submitting) return;
+    const id = setInterval(() => {
+      if (!submitting) void loadTranscript(conversationId, sessionToken);
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [sessionToken, conversationId, submitting, loadTranscript]);
 
   const onStartChat = async () => {
     setSubmitting(true);
@@ -94,20 +104,29 @@ export const ChatPage = () => {
   };
 
   const onSend = async () => {
-    if (!sessionToken || !conversationId || !input.trim()) return;
+    if (!sessionToken || !conversationId || !input.trim() || submitting) return;
     const content = input.trim();
-    const now = new Date().toISOString();
-    const outgoing: LocalMessage = { id: `temp-${Date.now()}`, role: "client", content, createdAt: now };
+    const tempId = `temp-${Date.now()}`;
+    const optimisticTs = new Date().toISOString();
+    const outgoing: LocalMessage = { id: tempId, role: "client", content, createdAt: optimisticTs };
+
     setInput("");
     setMessages((current) => [...current, outgoing]);
     setSubmitting(true);
     setError(null);
+
     try {
       const response = await sendCustomerMessage(conversationId, { sessionToken, content });
+
       setMessages((current) => [
-        ...current,
-        { id: response.messageId, role: "ai", content: response.aiResponse, createdAt: now }
+        ...current.map((m) =>
+          m.id === tempId
+            ? { id: response.clientMessageId, role: "client" as const, content, createdAt: response.clientMessageCreatedAt }
+            : m
+        ),
+        { id: response.messageId, role: "ai" as const, content: response.aiResponse, createdAt: response.aiResponseCreatedAt }
       ]);
+
       if (response.ticket) {
         const t = response.ticket;
         const titlePart = t.title ? (t.title.length > 50 ? `${t.title.slice(0, 50)}…` : t.title) : "";
@@ -116,6 +135,7 @@ export const ChatPage = () => {
         setTicketNotice(null);
       }
     } catch (apiError) {
+      setMessages((current) => current.filter((m) => m.id !== tempId));
       setError(apiError instanceof Error ? apiError.message : "Failed to send message");
     } finally {
       setSubmitting(false);
@@ -131,8 +151,8 @@ export const ChatPage = () => {
     try {
       await submitFeedback(conversationId, sessionToken, rating, feedbackComment.trim() || undefined);
       setFeedbackSubmitted(true);
-    } catch {
-      setError("Failed to submit feedback");
+    } catch (apiError) {
+      setError(apiError instanceof Error ? apiError.message : "Failed to submit feedback");
     } finally {
       setFeedbackSending(false);
     }
@@ -153,7 +173,7 @@ export const ChatPage = () => {
               className="cp-prechat-form"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (canSubmitPreChat && !submitting) onStartChat();
+                if (canSubmitPreChat && !submitting) void onStartChat();
               }}
             >
               <input
@@ -178,7 +198,12 @@ export const ChatPage = () => {
             {error ? (
               <div role="alert" className="cp-error-wrap">
                 <p className="cp-error">{error}</p>
-                <button type="button" onClick={() => { setError(null); onStartChat(); }} className="cp-btn cp-btn-primary" style={{ marginTop: "0.5rem" }}>
+                <button
+                  type="button"
+                  onClick={() => { setError(null); void onStartChat(); }}
+                  className="cp-btn cp-btn-primary"
+                  style={{ marginTop: "0.5rem" }}
+                >
                   Try again
                 </button>
               </div>
@@ -209,7 +234,12 @@ export const ChatPage = () => {
             ) : messages.length === 0 && error ? (
               <div className="cp-empty-state" role="alert">
                 <p className="cp-error">{error}</p>
-                <button type="button" onClick={refetchTranscript} className="cp-btn cp-btn-primary" style={{ marginTop: "0.5rem" }}>
+                <button
+                  type="button"
+                  onClick={() => conversationId && sessionToken && void loadTranscript(conversationId, sessionToken)}
+                  className="cp-btn cp-btn-primary"
+                  style={{ marginTop: "0.5rem" }}
+                >
                   Try again
                 </button>
               </div>
@@ -229,11 +259,15 @@ export const ChatPage = () => {
             {messages.map((message) => (
               <div key={message.id} className={`cp-bubble-wrap cp-bubble-wrap--${message.role}`}>
                 {message.role === "ai" && <div className="cp-bubble-avatar cp-bubble-avatar--agent" aria-hidden />}
-                <div className={`cp-bubble cp-bubble--${message.role}`}>
+                <div className={`cp-bubble cp-bubble--${message.role}${message.failed ? " cp-bubble--failed" : ""}`}>
                   <span className="cp-bubble-content">{message.content}</span>
                   <span className="cp-bubble-time">{formatTime(message.createdAt)}</span>
                 </div>
-                {message.role === "client" && <div className="cp-bubble-avatar cp-bubble-avatar--user">{name.trim().slice(0, 2).toUpperCase() || "You"}</div>}
+                {message.role === "client" && (
+                  <div className="cp-bubble-avatar cp-bubble-avatar--user">
+                    {name.trim().slice(0, 2).toUpperCase() || "Me"}
+                  </div>
+                )}
               </div>
             ))}
             {submitting && (
@@ -260,10 +294,10 @@ export const ChatPage = () => {
             <div className="cp-feedback">
               <span className="cp-feedback-label">Was this helpful?</span>
               <div className="cp-feedback-actions">
-                <button type="button" onClick={() => onFeedback("up")} disabled={feedbackSending} className="cp-feedback-btn" aria-label="Yes">
+                <button type="button" onClick={() => void onFeedback("up")} disabled={feedbackSending} className="cp-feedback-btn" aria-label="Yes">
                   👍
                 </button>
-                <button type="button" onClick={() => onFeedback("down")} disabled={feedbackSending} className="cp-feedback-btn" aria-label="No">
+                <button type="button" onClick={() => void onFeedback("down")} disabled={feedbackSending} className="cp-feedback-btn" aria-label="No">
                   👎
                 </button>
                 <textarea
@@ -285,20 +319,33 @@ export const ChatPage = () => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type your message…"
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && onSend()}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void onSend(); } }}
               className="cp-input cp-input--message"
               aria-label="Message"
+              disabled={submitting}
             />
-            <button type="button" disabled={submitting || !input.trim()} onClick={onSend} className="cp-btn cp-btn-send" aria-label="Send">
+            <button
+              type="button"
+              disabled={submitting || !input.trim()}
+              onClick={() => void onSend()}
+              className="cp-btn cp-btn-send"
+              aria-label="Send"
+            >
               {submitting ? "…" : "Send"}
             </button>
           </div>
         </div>
+
         {error && messages.length > 0 ? (
           <div role="alert" className="cp-error-inline-wrap">
             <p className="cp-error cp-error-inline">{error}</p>
-            <button type="button" onClick={() => { setError(null); messageInputRef.current?.focus(); }} className="cp-btn cp-btn-primary" style={{ marginTop: "0.5rem" }}>
-              Try again
+            <button
+              type="button"
+              onClick={() => { setError(null); messageInputRef.current?.focus(); }}
+              className="cp-btn cp-btn-primary"
+              style={{ marginTop: "0.5rem" }}
+            >
+              Dismiss
             </button>
           </div>
         ) : null}

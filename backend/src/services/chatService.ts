@@ -17,7 +17,10 @@ function titleFromUserMessage(content: string): string {
 }
 
 export interface ChatProcessResult {
+  clientMessageId: string;
+  clientMessageCreatedAt: string;
   aiMessageId: string;
+  aiResponseCreatedAt: string;
   aiResponse: string;
   confidence: number;
   ticket: Ticket | null;
@@ -35,7 +38,7 @@ export const processCustomerMessage = async (
 ): Promise<ChatProcessResult> => {
   const { conversationService, llmClient, ticketService, tenantService, emailService, auditService } = context;
 
-  await conversationService.addMessage(input.companyId, input.conversationId, "client", input.content);
+  const clientMessage = await conversationService.addMessage(input.companyId, input.conversationId, "client", input.content);
 
   const sentiment = sentimentFromContent(input.content);
   await conversationService.setSentiment(input.companyId, input.conversationId, sentiment);
@@ -68,30 +71,58 @@ export const processCustomerMessage = async (
   });
 
   const escalation = classifySeverity(input.content, aiReply.confidence);
+
+  // Count existing tickets for this client to support frequency-based escalation rules
+  const existingTickets = await context.ticketService.listByClient(input.companyId, input.clientId);
   const ruleOverrides = await context.escalationRuleService.evaluate(input.companyId, {
     messageContent: input.content,
     sentiment,
-    confidence: aiReply.confidence
+    confidence: aiReply.confidence,
+    clientTicketCount: existingTickets.length
   });
   const finalSeverity = ruleOverrides.severity ?? escalation.severity;
   let ticket: Ticket | null = null;
 
   if (escalation.shouldCreateTicket) {
+    // Classify message into an issue type so routing/SLA can use the correct config
+    const activeIssueTypes = (await context.issueTypeService.listByCompany(input.companyId))
+      .filter((it) => it.enabled);
+
+    let issueTypeId: string | null = null;
+    let slaDueAt: string | null = null;
+
+    if (activeIssueTypes.length > 0) {
+      const classification = await llmClient.classifyIssueType(
+        input.content,
+        activeIssueTypes.map((it) => ({ code: it.code, label: it.label }))
+      );
+      const matchedType = activeIssueTypes.find((it) => it.code === classification.issueTypeCode);
+      if (matchedType) {
+        issueTypeId = matchedType.id;
+        slaDueAt = new Date(Date.now() + matchedType.slaHours * 60 * 60 * 1000).toISOString();
+      }
+    }
+
     ticket = await ticketService.create({
       companyId: input.companyId,
       conversationId: input.conversationId,
       clientId: input.clientId,
+      issueTypeId,
       title: titleFromUserMessage(input.content),
       description: input.content,
       severity: finalSeverity,
-      assignedTo: ruleOverrides.assigneeId ?? null
+      assignedTo: ruleOverrides.assigneeId ?? null,
+      slaDueAt
     });
 
     await conversationService.setPrioritySnapshot(input.companyId, input.conversationId, finalSeverity);
 
     const company = await tenantService.findById(input.companyId);
     if (company) {
-      await emailService.notifyTicket(ticket, company);
+      const issueType = issueTypeId
+        ? activeIssueTypes.find((it) => it.id === issueTypeId) ?? null
+        : null;
+      await emailService.notifyTicket(ticket, company, issueType, ruleOverrides);
     }
 
     await auditService.record({
@@ -103,6 +134,7 @@ export const processCustomerMessage = async (
       resourceId: ticket.id,
       metadata: {
         severity: ticket.severity,
+        issueTypeId: ticket.issueTypeId,
         reason: escalation.reason
       }
     });
@@ -131,7 +163,10 @@ export const processCustomerMessage = async (
   });
 
   return {
+    clientMessageId: clientMessage.id,
+    clientMessageCreatedAt: clientMessage.createdAt,
     aiMessageId: aiMessage.id,
+    aiResponseCreatedAt: aiMessage.createdAt,
     aiResponse: contentToStore,
     confidence: aiReply.confidence,
     ticket

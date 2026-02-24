@@ -51,7 +51,7 @@ export function DashboardLayout({
         <div className="sticky top-0 flex h-screen flex-col">
           <div className="border-b border-slate-200 p-4">
             <Link href="/overview" className="block">
-              <h1 className="text-lg font-semibold text-slate-900">ClientPulse</h1>
+              <h1 className="text-lg font-semibold text-slate-900">Kleo - AI CLIENT SUCCESS AGENT</h1>
             </Link>
             <p className="text-xs text-slate-500">CS Dashboard</p>
             {onboardingProgress && !onboardingProgress.isProfileComplete ? (

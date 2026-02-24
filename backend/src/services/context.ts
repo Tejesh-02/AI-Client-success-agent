@@ -56,7 +56,7 @@ export const createServiceContext = (store: InMemoryStore = createSeedStore()): 
     escalationRuleService: new EscalationRuleService(store, supabase),
     cannedResponseService: new CannedResponseService(store, supabase),
     webhookService: new WebhookService(store, supabase),
-    conversationFeedbackService: new ConversationFeedbackService(supabase),
+    conversationFeedbackService: new ConversationFeedbackService(store, supabase),
     llmClient: new LlmClient()
   };
 };

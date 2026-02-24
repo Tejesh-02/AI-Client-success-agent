@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ClientPulse Dashboard",
-  description: "CS Dashboard for ClientPulse"
+  title: "Kleo - AI CLIENT SUCCESS AGENT",
+  description: "CS Dashboard for Kleo - AI CLIENT SUCCESS AGENT"
 };
 
 export const viewport: Viewport = {

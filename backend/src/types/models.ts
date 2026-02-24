@@ -81,6 +81,7 @@ export interface Ticket {
   companyId: string;
   conversationId: string;
   clientId: string;
+  issueTypeId: string | null;
   title: string;
   description: string;
   status: TicketStatus;

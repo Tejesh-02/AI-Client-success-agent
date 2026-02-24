@@ -21,6 +21,7 @@ interface TicketRow {
   company_id: string;
   conversation_id: string;
   client_id: string;
+  issue_type_id: string | null;
   title: string;
   description: string;
   status: TicketStatus;
@@ -46,6 +47,7 @@ const mapRowToTicket = (row: TicketRow): Ticket => ({
   companyId: row.company_id,
   conversationId: row.conversation_id,
   clientId: row.client_id,
+  issueTypeId: row.issue_type_id ?? null,
   title: row.title,
   description: row.description,
   status: row.status,
@@ -62,6 +64,7 @@ const mapTicketToSummary = (ticket: Ticket): TicketSummary => ({
   companyId: ticket.companyId,
   conversationId: ticket.conversationId,
   clientId: ticket.clientId,
+  issueTypeId: ticket.issueTypeId ?? null,
   title: ticket.title,
   status: ticket.status,
   severity: ticket.severity,
@@ -90,6 +93,7 @@ export class TicketService {
     companyId: string;
     conversationId: string;
     clientId: string;
+    issueTypeId?: string | null;
     title: string;
     description: string;
     severity: TicketSeverity;
@@ -104,6 +108,7 @@ export class TicketService {
       companyId: input.companyId,
       conversationId: input.conversationId,
       clientId: input.clientId,
+      issueTypeId: input.issueTypeId ?? null,
       title: input.title,
       description: input.description,
       status: "open",
@@ -121,6 +126,7 @@ export class TicketService {
         company_id: ticket.companyId,
         conversation_id: ticket.conversationId,
         client_id: ticket.clientId,
+        issue_type_id: ticket.issueTypeId,
         title: ticket.title,
         description: ticket.description,
         status: ticket.status,
@@ -136,7 +142,7 @@ export class TicketService {
         .from("tickets")
         .insert(payload)
         .select(
-          "id, company_id, conversation_id, client_id, title, description, status, severity, assigned_to, reference_number, created_at, updated_at, sla_due_at"
+          "id, company_id, conversation_id, client_id, issue_type_id, title, description, status, severity, assigned_to, reference_number, created_at, updated_at, sla_due_at"
         )
         .single();
 
@@ -151,12 +157,35 @@ export class TicketService {
     return ticket;
   }
 
+  async listByClient(companyId: string, clientId: string): Promise<Ticket[]> {
+    if (this.supabase) {
+      const { data, error } = await this.supabase
+        .from("tickets")
+        .select(
+          "id, company_id, conversation_id, client_id, issue_type_id, title, description, status, severity, assigned_to, reference_number, created_at, updated_at, sla_due_at"
+        )
+        .eq("company_id", companyId)
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        throw new Error(`Failed to list tickets for client: ${error.message}`);
+      }
+
+      return (data ?? []).map((row) => mapRowToTicket(row as TicketRow));
+    }
+
+    return this.store.tickets
+      .filter((t) => t.companyId === companyId && t.clientId === clientId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
   async findById(companyId: string, ticketId: string): Promise<Ticket | null> {
     if (this.supabase) {
       const { data, error } = await this.supabase
         .from("tickets")
         .select(
-          "id, company_id, conversation_id, client_id, title, description, status, severity, assigned_to, reference_number, created_at, updated_at, sla_due_at"
+          "id, company_id, conversation_id, client_id, issue_type_id, title, description, status, severity, assigned_to, reference_number, created_at, updated_at, sla_due_at"
         )
         .eq("company_id", companyId)
         .eq("id", ticketId)
@@ -177,7 +206,7 @@ export class TicketService {
       let query = this.supabase
         .from("tickets")
         .select(
-          "id, company_id, conversation_id, client_id, title, description, status, severity, assigned_to, reference_number, created_at, updated_at, sla_due_at"
+          "id, company_id, conversation_id, client_id, issue_type_id, title, description, status, severity, assigned_to, reference_number, created_at, updated_at, sla_due_at"
         )
         .eq("company_id", companyId)
         .order("created_at", { ascending: false });
@@ -240,7 +269,7 @@ export class TicketService {
         .eq("company_id", companyId)
         .eq("id", ticketId)
         .select(
-          "id, company_id, conversation_id, client_id, title, description, status, severity, assigned_to, reference_number, created_at, updated_at, sla_due_at"
+          "id, company_id, conversation_id, client_id, issue_type_id, title, description, status, severity, assigned_to, reference_number, created_at, updated_at, sla_due_at"
         )
         .maybeSingle();
 

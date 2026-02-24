@@ -5,7 +5,9 @@ import type { ServiceContext } from "../../../services/context";
 const conversationFilterSchema = z.object({
   status: z.enum(["active", "resolved", "handed_off"]).optional(),
   sentiment: z.enum(["positive", "neutral", "negative", "frustrated"]).optional(),
-  clientId: z.string().optional()
+  clientId: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0)
 });
 
 const agentMessageSchema = z.object({
@@ -28,11 +30,12 @@ export const createInternalConversationsRouter = (context: ServiceContext): Rout
         return;
       }
 
+      const { limit, offset, ...filters } = parsed.data;
       const items = await context.conversationService.listConversations(
         req.internalAuth.companyId,
         req.internalAuth.role,
         req.internalAuth.userId,
-        parsed.data
+        filters
       );
 
       const clientIds = [...new Set(items.map((c) => c.clientId))];
@@ -50,11 +53,36 @@ export const createInternalConversationsRouter = (context: ServiceContext): Rout
           byClient.set(item.clientId, item);
         }
       }
-      const deduped = [...byClient.values()].sort(
+      const allDeduped = [...byClient.values()].sort(
         (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
       );
 
-      res.json({ items: deduped, total: deduped.length });
+      const total = allDeduped.length;
+      const deduped = allDeduped.slice(offset, offset + limit);
+      res.json({ items: deduped, total, limit, offset });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/conversations/:conversationId", async (req, res, next) => {
+    try {
+      if (!req.internalAuth) {
+        res.status(401).json({ error: "Missing internal auth context" });
+        return;
+      }
+
+      const { conversationId } = req.params;
+      const companyId = req.internalAuth.companyId;
+
+      const conversation = await context.conversationService.findById(companyId, conversationId);
+      if (!conversation) {
+        res.status(404).json({ error: "Conversation not found" });
+        return;
+      }
+
+      const client = await context.clientService.findById(companyId, conversation.clientId);
+      res.json({ ...conversation, clientName: client?.name });
     } catch (error) {
       next(error);
     }
@@ -143,12 +171,18 @@ export const createInternalConversationsRouter = (context: ServiceContext): Rout
 
       await context.conversationService.setHandedOff(companyId, conversationId, agentId);
 
-      const message = await context.conversationService.addMessage(
-        companyId,
-        conversationId,
-        "agent",
-        parsed.data.content
-      );
+      let message;
+      try {
+        message = await context.conversationService.addMessage(
+          companyId,
+          conversationId,
+          "agent",
+          parsed.data.content
+        );
+      } catch (msgError) {
+        console.error(`[agent-messages] addMessage failed after setHandedOff for ${conversationId}:`, msgError);
+        throw msgError;
+      }
 
       res.status(201).json({ messageId: message.id, content: message.content });
     } catch (error) {

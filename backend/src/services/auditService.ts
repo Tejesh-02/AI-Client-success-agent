@@ -7,7 +7,7 @@ interface AuditRow {
   id: string;
   company_id: string;
   actor_type: AuditActorType;
-  user_id: string;
+  actor_id: string;
   action: string;
   resource_type: string;
   resource_id: string;
@@ -19,7 +19,7 @@ const mapRowToAudit = (row: AuditRow): AuditLog => ({
   id: row.id,
   companyId: row.company_id,
   actorType: row.actor_type,
-  actorId: row.user_id,
+  actorId: row.actor_id,
   action: row.action,
   resourceType: row.resource_type,
   resourceId: row.resource_id,
@@ -59,7 +59,7 @@ export class AuditService {
         id: log.id,
         company_id: log.companyId,
         actor_type: log.actorType,
-        user_id: log.actorId,
+        actor_id: log.actorId,
         action: log.action,
         resource_type: log.resourceType,
         resource_id: log.resourceId,
@@ -70,7 +70,7 @@ export class AuditService {
       const { data, error } = await this.supabase
         .from("audit_logs")
         .insert(payload)
-        .select("id, company_id, actor_type, user_id, action, resource_type, resource_id, metadata, created_at")
+        .select("id, company_id, actor_type, actor_id, action, resource_type, resource_id, metadata, created_at")
         .single();
 
       if (error) {
@@ -99,13 +99,13 @@ export class AuditService {
     if (this.supabase) {
       let query = this.supabase
         .from("audit_logs")
-        .select("id, company_id, actor_type, user_id, action, resource_type, resource_id, metadata, created_at", { count: "exact" })
+        .select("id, company_id, actor_type, actor_id, action, resource_type, resource_id, metadata, created_at", { count: "exact" })
         .eq("company_id", companyId)
         .order("created_at", { ascending: false })
         .range(offset, offset + limit - 1);
 
       if (filters.actorId) {
-        query = query.eq("user_id", filters.actorId);
+        query = query.eq("actor_id", filters.actorId);
       }
       if (filters.action) {
         query = query.eq("action", filters.action);

@@ -13,8 +13,19 @@ import type {
   Message,
   Ticket,
   TicketComment,
-  TicketNotification
+  TicketNotification,
+  WebhookConfig,
+  WebhookEvent
 } from "../types/models";
+
+export interface ConversationFeedbackRecord {
+  id: string;
+  companyId: string;
+  conversationId: string;
+  rating: "up" | "down";
+  comment: string | null;
+  createdAt: string;
+}
 
 export interface InMemoryStore {
   companies: Company[];
@@ -31,6 +42,9 @@ export interface InMemoryStore {
   issueTypes: IssueType[];
   escalationRules: EscalationRule[];
   cannedResponses: CannedResponse[];
+  webhookConfigs: WebhookConfig[];
+  webhookEvents: WebhookEvent[];
+  conversationFeedback: ConversationFeedbackRecord[];
 }
 
 const now = () => new Date().toISOString();
@@ -135,6 +149,7 @@ export const createSeedStore = (): InMemoryStore => {
         companyId,
         conversationId,
         clientId,
+        issueTypeId: null,
         title: "Onboarding assistance",
         description: "Customer needs onboarding help",
         status: "open",
@@ -152,7 +167,10 @@ export const createSeedStore = (): InMemoryStore => {
     companyDocuments: [],
     issueTypes: [],
     escalationRules: [],
-    cannedResponses: []
+    cannedResponses: [],
+    webhookConfigs: [],
+    webhookEvents: [],
+    conversationFeedback: []
   };
 };
 

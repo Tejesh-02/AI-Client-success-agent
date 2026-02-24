@@ -1,4 +1,4 @@
-﻿import type { NextFunction, Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import type { ServiceContext } from "../services/context";
 import { verifyInternalAccessToken } from "../utils/internalToken";
 
@@ -8,15 +8,13 @@ export const internalAuthMiddleware = (context: ServiceContext) => async (
   next: NextFunction
 ) => {
   try {
-    const authorization = req.header("authorization");
-    if (!authorization || !authorization.startsWith("Bearer ")) {
-      res.status(401).json({ error: "Missing bearer token" });
-      return;
-    }
+    const cookieToken = (req.cookies as Record<string, string> | undefined)?.cp_access_token;
+    const authHeader = req.header("authorization");
+    const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.replace("Bearer ", "").trim() : null;
 
-    const token = authorization.replace("Bearer ", "").trim();
+    const token = cookieToken ?? bearerToken;
     if (!token) {
-      res.status(401).json({ error: "Invalid bearer token" });
+      res.status(401).json({ error: "Authentication required" });
       return;
     }
 

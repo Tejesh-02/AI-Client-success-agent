@@ -6,7 +6,9 @@ import type { ServiceContext } from "../../../services/context";
 const ticketFilterSchema = z.object({
   status: z.enum(ticketStatuses).optional(),
   severity: z.enum(ticketSeverities).optional(),
-  assignedTo: z.string().optional()
+  assignedTo: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0)
 });
 
 const ticketUpdateSchema = z.object({
@@ -36,14 +38,41 @@ export const createInternalTicketsRouter = (context: ServiceContext): Router => 
         return;
       }
 
-      const items = await context.ticketService.list(
+      const { limit, offset, ...filters } = parsed.data;
+      const allItems = await context.ticketService.list(
         req.internalAuth.companyId,
         req.internalAuth.role,
         req.internalAuth.userId,
-        parsed.data
+        filters
       );
 
-      res.json({ items, total: items.length });
+      const total = allItems.length;
+      const items = allItems.slice(offset, offset + limit);
+      res.json({ items, total, limit, offset });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/tickets/:ticketId", async (req, res, next) => {
+    try {
+      if (!req.internalAuth) {
+        res.status(401).json({ error: "Missing internal auth context" });
+        return;
+      }
+
+      const ticket = await context.ticketService.findById(req.internalAuth.companyId, req.params.ticketId);
+      if (!ticket) {
+        res.status(404).json({ error: "Ticket not found" });
+        return;
+      }
+
+      if (req.internalAuth.role === "agent" && ticket.assignedTo !== req.internalAuth.userId) {
+        res.status(403).json({ error: "Agents can only view assigned tickets" });
+        return;
+      }
+
+      res.json(ticket);
     } catch (error) {
       next(error);
     }
@@ -81,7 +110,10 @@ export const createInternalTicketsRouter = (context: ServiceContext): Router => 
 
       const company = await context.tenantService.findById(req.internalAuth.companyId);
       if (company) {
-        await context.emailService.notifyTicketUpdated(updated, company);
+        const issueType = updated.issueTypeId
+          ? await context.issueTypeService.findById(req.internalAuth.companyId, updated.issueTypeId)
+          : null;
+        await context.emailService.notifyTicketUpdated(updated, company, issueType ?? undefined);
       }
 
       await context.auditService.record({

@@ -9,6 +9,13 @@ const createConfigSchema = z.object({
   events: z.array(z.string()).min(1)
 });
 
+const updateConfigSchema = z.object({
+  url: z.string().url().optional(),
+  secret: z.string().min(1).max(500).optional(),
+  events: z.array(z.string()).min(1).optional(),
+  enabled: z.boolean().optional()
+});
+
 export const createInternalWebhooksRouter = (context: ServiceContext): Router => {
   const router = Router();
 
@@ -38,6 +45,28 @@ export const createInternalWebhooksRouter = (context: ServiceContext): Router =>
       }
       const config = await context.webhookService.createConfig(req.internalAuth.companyId, parsed.data);
       res.status(201).json({ id: config.id, url: config.url, events: config.events, enabled: config.enabled, createdAt: config.createdAt });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch("/webhook-configs/:id", requireRoles(["admin"]), async (req, res, next) => {
+    try {
+      if (!req.internalAuth) {
+        res.status(401).json({ error: "Missing internal auth context" });
+        return;
+      }
+      const parsed = updateConfigSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+        return;
+      }
+      const updated = await context.webhookService.updateConfig(req.internalAuth.companyId, req.params.id, parsed.data);
+      if (!updated) {
+        res.status(404).json({ error: "Config not found" });
+        return;
+      }
+      res.json({ id: updated.id, url: updated.url, events: updated.events, enabled: updated.enabled, updatedAt: updated.updatedAt });
     } catch (error) {
       next(error);
     }

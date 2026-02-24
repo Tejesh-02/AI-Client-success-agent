@@ -36,7 +36,10 @@ export interface EscalationContext {
   messageContent: string;
   sentiment: string;
   confidence: number;
+  /** Customer's plan/tier, e.g. "enterprise", "pro", "free". Optional — rules using plan_type won't match if omitted. */
   planType?: string;
+  /** Number of tickets already raised by this client (used for frequency trigger). */
+  clientTicketCount?: number;
 }
 
 export interface EscalationOverrides {
@@ -259,7 +262,13 @@ export class EscalationRuleService {
 
   private matchesRule(rule: EscalationRule, ctx: EscalationContext): boolean {
     const content = ctx.messageContent.toLowerCase();
-    const tc = rule.triggerConfig as { keywords?: string[]; sentiment?: string; planType?: string };
+    const tc = rule.triggerConfig as {
+      keywords?: string[];
+      sentiment?: string;
+      planType?: string;
+      /** Minimum number of tickets to trigger the frequency rule. */
+      threshold?: number;
+    };
 
     switch (rule.triggerType) {
       case "keyword":
@@ -267,21 +276,43 @@ export class EscalationRuleService {
           return tc.keywords.some((k: string) => content.includes(k.toLowerCase()));
         }
         return false;
+
       case "sentiment":
         if (tc.sentiment && ctx.sentiment) {
           return ctx.sentiment === tc.sentiment;
         }
         return false;
+
       case "churn":
-        return true; // Churn rule always matches when evaluated (e.g. after other signals)
+        // Churn rule matches when the message contains typical churn signals
+        return (
+          content.includes("cancel") ||
+          content.includes("leaving") ||
+          content.includes("unsubscribe") ||
+          content.includes("switch") ||
+          content.includes("competitor") ||
+          content.includes("disappointed") ||
+          content.includes("not happy") ||
+          content.includes("stop using") ||
+          ctx.sentiment === "frustrated"
+        );
+
       case "plan_type":
+        // planType is populated from the client's metadata (passed in context).
+        // If not provided, the rule cannot match.
         if (tc.planType && ctx.planType) {
-          return ctx.planType === tc.planType;
+          return ctx.planType.toLowerCase() === tc.planType.toLowerCase();
         }
         return false;
+
       case "frequency":
-        // Frequency would need conversation/ticket count - not implemented here
+        // Match when the client has raised >= threshold tickets.
+        // clientTicketCount is provided by chatService when creating tickets.
+        if (typeof tc.threshold === "number" && typeof ctx.clientTicketCount === "number") {
+          return ctx.clientTicketCount >= tc.threshold;
+        }
         return false;
+
       default:
         return false;
     }

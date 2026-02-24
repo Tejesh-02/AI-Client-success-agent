@@ -50,7 +50,10 @@ export const createPublicConversationsRouter = (context: ServiceContext): Router
       });
 
       res.status(201).json({
+        clientMessageId: result.clientMessageId,
+        clientMessageCreatedAt: result.clientMessageCreatedAt,
         messageId: result.aiMessageId,
+        aiResponseCreatedAt: result.aiResponseCreatedAt,
         aiResponse: result.aiResponse,
         confidence: result.confidence,
         ticket: result.ticket

@@ -75,6 +75,7 @@ export interface TicketSummary {
   companyId: string;
   conversationId: string;
   clientId: string;
+  issueTypeId?: string | null;
   title: string;
   status: TicketStatus;
   severity: TicketSeverity;

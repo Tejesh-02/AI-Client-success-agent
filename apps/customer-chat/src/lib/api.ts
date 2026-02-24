@@ -10,7 +10,10 @@ interface ApiMessage {
 }
 
 export interface SendMessageResponse {
+  clientMessageId: string;
+  clientMessageCreatedAt: string;
   messageId: string;
+  aiResponseCreatedAt: string;
   aiResponse: string;
   confidence: number;
   ticket: {

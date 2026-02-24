@@ -8,9 +8,9 @@ const triggerTypes: EscalationTriggerType[] = ["keyword", "plan_type", "frequenc
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
-  triggerType: z.enum(triggerTypes as [string, ...string[]]),
+  triggerType: z.enum(triggerTypes as unknown as [EscalationTriggerType, ...EscalationTriggerType[]]),
   triggerConfig: z.record(z.unknown()).optional(),
-  importanceOverride: z.enum(ticketSeverities as [string, ...string[]]).nullable().optional(),
+  importanceOverride: z.enum([...ticketSeverities] as [string, ...string[]]).nullable().optional(),
   actionConfig: z.record(z.unknown()).optional(),
   enabled: z.boolean().optional(),
   sortOrder: z.number().int().min(0).optional()
@@ -18,9 +18,9 @@ const createSchema = z.object({
 
 const updateSchema = z.object({
   name: z.string().min(1).max(120).optional(),
-  triggerType: z.enum(triggerTypes as [string, ...string[]]).optional(),
+  triggerType: z.enum(triggerTypes as unknown as [EscalationTriggerType, ...EscalationTriggerType[]]).optional(),
   triggerConfig: z.record(z.unknown()).optional(),
-  importanceOverride: z.enum(ticketSeverities as [string, ...string[]]).nullable().optional(),
+  importanceOverride: z.enum([...ticketSeverities] as [string, ...string[]]).nullable().optional(),
   actionConfig: z.record(z.unknown()).optional(),
   enabled: z.boolean().optional(),
   sortOrder: z.number().int().min(0).optional()
@@ -56,9 +56,10 @@ export const createInternalEscalationRulesRouter = (context: ServiceContext): Ro
         return;
       }
 
+      const importanceOverride = (parsed.data.importanceOverride ?? null) as import("@clientpulse/types").TicketSeverity | null;
       const rule = await context.escalationRuleService.create(req.internalAuth.companyId, {
         ...parsed.data,
-        importanceOverride: parsed.data.importanceOverride ?? null
+        importanceOverride
       });
 
       await context.auditService.record({
@@ -96,9 +97,12 @@ export const createInternalEscalationRulesRouter = (context: ServiceContext): Ro
         return;
       }
 
+      const importanceOverride = parsed.data.importanceOverride !== undefined
+        ? (parsed.data.importanceOverride as import("@clientpulse/types").TicketSeverity | null)
+        : undefined;
       const updated = await context.escalationRuleService.update(req.internalAuth.companyId, req.params.id, {
         ...parsed.data,
-        importanceOverride: parsed.data.importanceOverride !== undefined ? parsed.data.importanceOverride : undefined
+        importanceOverride
       });
 
       if (!updated) {

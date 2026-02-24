@@ -1,4 +1,4 @@
-﻿import jwt from "jsonwebtoken";
+import jwt from "jsonwebtoken";
 import type { Role } from "../types/models";
 
 export interface InternalAccessTokenPayload {
@@ -9,7 +9,11 @@ export interface InternalAccessTokenPayload {
 }
 
 const getSecret = (): string => {
-  return process.env.JWT_SECRET ?? "local-dev-jwt-secret";
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error("JWT_SECRET environment variable is required");
+  }
+  return secret;
 };
 
 export const issueInternalAccessToken = (payload: InternalAccessTokenPayload): string =>

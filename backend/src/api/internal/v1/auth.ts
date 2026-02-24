@@ -1,7 +1,7 @@
-﻿import { Router } from "express";
+import { Router } from "express";
 import { z } from "zod";
 import type { ServiceContext } from "../../../services/context";
-import { issueInternalAccessToken } from "../../../utils/internalToken";
+import { issueInternalAccessToken, verifyInternalAccessToken } from "../../../utils/internalToken";
 
 const roleSchema = z.enum(["admin", "manager", "agent"]);
 
@@ -116,6 +116,20 @@ export const createInternalAuthRouter = (context: ServiceContext): Router => {
         }
       });
 
+      const ttlMs = (() => {
+        const ttl = process.env.JWT_ACCESS_TTL ?? "12h";
+        const match = /^(\d+)h$/.exec(ttl);
+        return match ? parseInt(match[1], 10) * 60 * 60 * 1000 : 12 * 60 * 60 * 1000;
+      })();
+
+      res.cookie("cp_access_token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: ttlMs,
+        path: "/"
+      });
+
       res.json({
         token,
         user: {
@@ -128,6 +142,45 @@ export const createInternalAuthRouter = (context: ServiceContext): Router => {
       });
     } catch (error) {
       next(error);
+    }
+  });
+
+  router.post("/auth/logout", (req, res) => {
+    res.clearCookie("cp_access_token", { path: "/" });
+    res.json({ ok: true });
+  });
+
+  router.get("/auth/me", async (req, res) => {
+    try {
+      const cookieToken = (req.cookies as Record<string, string> | undefined)?.cp_access_token;
+      const authHeader = req.header("authorization");
+      const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.replace("Bearer ", "").trim() : null;
+      const token = cookieToken ?? bearerToken;
+
+      if (!token) {
+        res.status(401).json({ error: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyInternalAccessToken(token);
+      const user = await context.internalAuthService.findById(payload.companyId, payload.sub);
+
+      if (!user) {
+        res.status(401).json({ error: "User not found" });
+        return;
+      }
+
+      res.json({
+        user: {
+          id: user.id,
+          companyId: user.companyId,
+          email: user.email,
+          name: user.name,
+          role: user.role
+        }
+      });
+    } catch {
+      res.status(401).json({ error: "Invalid session" });
     }
   });
 

@@ -15,6 +15,15 @@ export interface ConversationTurn {
   content: string;
 }
 
+export interface IssueTypeOption {
+  code: string;
+  label: string;
+}
+
+export interface ClassificationResult {
+  issueTypeCode: string;
+}
+
 const SUPPORT_PERSONA_NAME = "KLEO";
 
 const fallbackReply = (prompt: string): string => {
@@ -141,4 +150,84 @@ export class LlmClient {
       model: this.model
     };
   }
+
+  /**
+   * Classify a customer message into one of the provided issue type codes.
+   * Falls back to keyword matching if the API is unavailable.
+   */
+  async classifyIssueType(
+    message: string,
+    issueTypes: IssueTypeOption[]
+  ): Promise<ClassificationResult> {
+    if (issueTypes.length === 0) {
+      return { issueTypeCode: "other" };
+    }
+
+    const fallback = classifyByKeyword(message, issueTypes);
+
+    if (!this.apiKey) {
+      return fallback;
+    }
+
+    try {
+      const optionsList = issueTypes.map((it) => `- ${it.code}: ${it.label}`).join("\n");
+      const systemPrompt = `You are a support ticket classifier. Given a customer message, respond with only the issue type code that best fits the message. Do not add any explanation or punctuation.\n\nAvailable issue types:\n${optionsList}`;
+
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: this.model,
+          temperature: 0,
+          max_tokens: 20,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: message }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        return fallback;
+      }
+
+      const payload = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+
+      const raw = payload.choices?.[0]?.message?.content?.trim().toLowerCase() ?? "";
+      const matched = issueTypes.find((it) => it.code === raw);
+      if (matched) {
+        return { issueTypeCode: matched.code };
+      }
+    } catch {
+      // ignore classification errors — fallback is used
+    }
+
+    return fallback;
+  }
+}
+
+function classifyByKeyword(message: string, issueTypes: IssueTypeOption[]): ClassificationResult {
+  const lc = message.toLowerCase();
+  const keywordMap: Record<string, string[]> = {
+    billing: ["billing", "invoice", "payment", "charge", "refund", "subscription", "price", "cost"],
+    technical: ["error", "bug", "crash", "broken", "failed", "not working", "issue", "problem", "fix"],
+    access: ["login", "password", "access", "permission", "locked", "account", "sign in", "unauthorized"],
+    onboarding: ["setup", "onboard", "getting started", "new", "install", "configure", "first time"],
+    feature: ["feature", "request", "suggestion", "enhancement", "add", "support for", "wish"],
+    legal: ["legal", "compliance", "gdpr", "privacy", "contract", "terms", "policy"]
+  };
+
+  for (const [code, keywords] of Object.entries(keywordMap)) {
+    if (issueTypes.find((it) => it.code === code) && keywords.some((k) => lc.includes(k))) {
+      return { issueTypeCode: code };
+    }
+  }
+
+  const otherType = issueTypes.find((it) => it.code === "other") ?? issueTypes[issueTypes.length - 1];
+  return { issueTypeCode: otherType?.code ?? "other" };
 }

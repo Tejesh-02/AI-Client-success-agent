@@ -463,3 +463,35 @@ body {
   padding: 0 1rem 0.5rem;
   margin: 0;
 }
+
+.cp-error-wrap {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--cp-radius-sm);
+  display: flex;
+  flex-direction: column;
+}
+
+.cp-error-wrap .cp-error {
+  margin: 0;
+}
+
+.cp-error-inline-wrap {
+  padding: 0.5rem 1rem 0.75rem;
+  background: #fef2f2;
+  border-top: 1px solid #fecaca;
+  display: flex;
+  flex-direction: column;
+}
+
+.cp-error-inline-wrap .cp-error {
+  padding: 0;
+  margin: 0;
+}
+
+.cp-bubble--failed {
+  opacity: 0.6;
+  border: 1px dashed var(--cp-error);
+}
