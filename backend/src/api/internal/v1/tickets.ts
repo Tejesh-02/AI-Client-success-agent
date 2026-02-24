@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import type { ServiceContext } from "../../../services/context";
 import { ticketSeverities, ticketStatuses } from "../../../../../packages/types/src/index";
@@ -38,7 +39,7 @@ const commentSchema = z.object({
 export const createInternalTicketsRouter = (context: ServiceContext): Router => {
   const router = Router();
 
-  router.get("/tickets", async (req, res, next) => {
+  router.get("/tickets", async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.internalAuth) {
         res.status(401).json({ error: "Missing internal auth context" });
@@ -67,7 +68,7 @@ export const createInternalTicketsRouter = (context: ServiceContext): Router => 
     }
   });
 
-  router.post("/tickets/bulk", async (req, res, next) => {
+  router.post("/tickets/bulk", async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.internalAuth) {
         res.status(401).json({ error: "Missing internal auth context" });
@@ -107,18 +108,18 @@ export const createInternalTicketsRouter = (context: ServiceContext): Router => 
           severity: existing.severity,
           assignedTo: existing.assignedTo
         };
-        const next = await context.ticketService.update(req.internalAuth.companyId, existing.id, patch);
-        if (!next) {
+        const ticketNext = await context.ticketService.update(req.internalAuth.companyId, existing.id, patch);
+        if (!ticketNext) {
           skipped.push({ ticketId, reason: "not_found" });
           continue;
         }
 
-        updated.push(next);
-        const issueType = next.issueTypeId
-          ? await context.issueTypeService.findById(req.internalAuth.companyId, next.issueTypeId)
+        updated.push(ticketNext);
+        const issueType = ticketNext.issueTypeId
+          ? await context.issueTypeService.findById(req.internalAuth.companyId, ticketNext.issueTypeId)
           : null;
         if (company) {
-          await context.emailService.notifyTicketUpdated(next, company, issueType ?? undefined);
+          await context.emailService.notifyTicketUpdated(ticketNext, company, issueType ?? undefined);
         }
 
         await context.auditService.record({
@@ -127,25 +128,25 @@ export const createInternalTicketsRouter = (context: ServiceContext): Router => 
           actorId: req.internalAuth.userId,
           action: "ticket.updated",
           resourceType: "ticket",
-          resourceId: next.id,
+          resourceId: ticketNext.id,
           metadata: {
             ...patch,
             bulk: true,
             before: previousState,
             after: {
-              status: next.status,
-              severity: next.severity,
-              assignedTo: next.assignedTo
+              status: ticketNext.status,
+              severity: ticketNext.severity,
+              assignedTo: ticketNext.assignedTo
             }
           }
         });
 
         await context.webhookService.dispatch(req.internalAuth.companyId, "ticket.updated", {
-          ticketId: next.id,
-          referenceNumber: next.referenceNumber,
-          status: next.status,
-          severity: next.severity,
-          assignedTo: next.assignedTo
+          ticketId: ticketNext.id,
+          referenceNumber: ticketNext.referenceNumber,
+          status: ticketNext.status,
+          severity: ticketNext.severity,
+          assignedTo: ticketNext.assignedTo
         });
       }
 
@@ -155,7 +156,7 @@ export const createInternalTicketsRouter = (context: ServiceContext): Router => 
     }
   });
 
-  router.get("/tickets/:ticketId", async (req, res, next) => {
+  router.get("/tickets/:ticketId", async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.internalAuth) {
         res.status(401).json({ error: "Missing internal auth context" });
@@ -179,7 +180,7 @@ export const createInternalTicketsRouter = (context: ServiceContext): Router => 
     }
   });
 
-  router.patch("/tickets/:ticketId", async (req, res, next) => {
+  router.patch("/tickets/:ticketId", async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.internalAuth) {
         res.status(401).json({ error: "Missing internal auth context" });
@@ -254,7 +255,7 @@ export const createInternalTicketsRouter = (context: ServiceContext): Router => 
     }
   });
 
-  router.post("/tickets/:ticketId/comments", async (req, res, next) => {
+  router.post("/tickets/:ticketId/comments", async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.internalAuth) {
         res.status(401).json({ error: "Missing internal auth context" });
@@ -304,7 +305,7 @@ export const createInternalTicketsRouter = (context: ServiceContext): Router => 
     }
   });
 
-  router.get("/tickets/:ticketId/comments", async (req, res, next) => {
+  router.get("/tickets/:ticketId/comments", async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.internalAuth) {
         res.status(401).json({ error: "Missing internal auth context" });

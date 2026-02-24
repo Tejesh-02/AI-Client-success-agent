@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import type { ServiceContext } from "../../../services/context";
 
@@ -10,7 +11,7 @@ const patchSchema = z.object({
 export const createInternalOnboardingRouter = (context: ServiceContext): Router => {
   const router = Router();
 
-  router.get("/onboarding", async (req, res, next) => {
+  router.get("/onboarding", async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.internalAuth) {
         res.status(401).json({ error: "Missing internal auth context" });
@@ -23,7 +24,7 @@ export const createInternalOnboardingRouter = (context: ServiceContext): Router 
     }
   });
 
-  router.patch("/onboarding", async (req, res, next) => {
+  router.patch("/onboarding", async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.internalAuth) {
         res.status(401).json({ error: "Missing internal auth context" });
