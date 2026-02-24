@@ -71,6 +71,7 @@ const mapTicketToSummary = (ticket: Ticket): TicketSummary => ({
   assignedTo: ticket.assignedTo,
   referenceNumber: ticket.referenceNumber,
   createdAt: ticket.createdAt,
+  updatedAt: ticket.updatedAt,
   slaDueAt: ticket.slaDueAt ?? undefined
 });
 

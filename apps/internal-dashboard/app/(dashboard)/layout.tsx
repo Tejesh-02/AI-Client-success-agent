@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { InternalLoginRequest, InternalLoginResponse } from "@clientpulse/types";
-import { DashboardLayout } from "../../components/DashboardLayout";
 import { DashboardClient } from "../../components/DashboardClient";
+import { DashboardLayout } from "../../components/DashboardLayout";
 import { getPermissions } from "../../components/shared/useAuth";
 import type { UserInfo } from "../../components/shared/useAuth";
 
@@ -69,15 +69,15 @@ export default function DashboardRouteLayout({ children }: { children: React.Rea
       credentials: "include",
       headers: storedToken ? { Authorization: `Bearer ${storedToken}` } : {}
     })
-      .then((r) => (r.ok ? r.json() : null))
+      .then((response) => (response.ok ? response.json() : null))
       .then((data: { user: UserInfo } | null) => {
         if (data?.user) {
           setUser(data.user);
           if (storedToken) setToken(storedToken);
         }
       })
-      .catch((e: unknown) => {
-        if (e instanceof Error) console.warn("Session check failed:", e.message);
+      .catch(() => {
+        // Keep user at login screen if check fails.
       })
       .finally(() => setSessionChecked(true));
   }, []);
@@ -90,10 +90,10 @@ export default function DashboardRouteLayout({ children }: { children: React.Rea
       credentials: "include",
       signal: abort.signal
     })
-      .then((r) => (r.ok ? r.json() : null))
+      .then((response) => (response.ok ? response.json() : null))
       .then((data) => data && setOnboarding(data))
-      .catch((e: unknown) => {
-        if (e instanceof Error) console.warn("Onboarding fetch failed:", e.message);
+      .catch(() => {
+        // Onboarding is best-effort.
       });
     return () => abort.abort();
   }, [token]);
@@ -121,8 +121,8 @@ export default function DashboardRouteLayout({ children }: { children: React.Rea
         const data = await response.json().catch(() => ({ error: "Login failed" }));
         throw new Error(data.error ?? "Login failed");
       }
+
       const data = (await response.json()) as InternalLoginResponse;
-      setStoredToken(data.token);
       const userInfo: UserInfo = {
         id: data.user.id,
         companyId: data.user.companyId,
@@ -130,6 +130,8 @@ export default function DashboardRouteLayout({ children }: { children: React.Rea
         name: data.user.name,
         role: data.user.role
       };
+
+      setStoredToken(data.token);
       setStoredUser(userInfo);
       setToken(data.token);
       setUser(userInfo);
@@ -152,58 +154,42 @@ export default function DashboardRouteLayout({ children }: { children: React.Rea
   if (!sessionChecked) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-100">
-        <p className="text-slate-500 text-sm">Checking session…</p>
+        <p className="text-sm text-slate-500">Checking session...</p>
       </div>
     );
   }
 
   if (!token) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
-        <section className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Internal Login</h2>
-          <p className="mt-1 text-sm text-slate-500">Use email and password to access the dashboard.</p>
-          <div className="mt-4 flex flex-col gap-4">
-            <div className="form-field">
-              <label className="form-label" htmlFor="login-company">Company slug</label>
-              <input
-                id="login-company"
-                value={companySlug}
-                onChange={(e) => setCompanySlug(e.target.value)}
-                placeholder="e.g. acme"
-                className="form-input"
-              />
+      <div className="flex min-h-screen items-center justify-center p-4" style={{ background: "var(--db-bg)" }}>
+        <section className="db-panel w-full max-w-md">
+          <h2 className="db-page-title" style={{ fontSize: "1.2rem" }}>Internal Login</h2>
+          <p className="db-page-subtitle">Use your tenant slug and internal credentials.</p>
+          <div className="mt-3 space-y-3">
+            <div className="db-field">
+              <label htmlFor="login-company">Company slug</label>
+              <input id="login-company" className="db-input" value={companySlug} onChange={(e) => setCompanySlug(e.target.value)} placeholder="e.g. acme" />
             </div>
-            <div className="form-field">
-              <label className="form-label" htmlFor="login-email">Email</label>
-              <input
-                id="login-email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@company.com"
-                type="email"
-                className="form-input"
-              />
+            <div className="db-field">
+              <label htmlFor="login-email">Email</label>
+              <input id="login-email" type="email" className="db-input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
             </div>
-            <div className="form-field">
-              <label className="form-label" htmlFor="login-password">Password</label>
+            <div className="db-field">
+              <label htmlFor="login-password">Password</label>
               <input
                 id="login-password"
+                type="password"
+                className="db-input"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                type="password"
-                className="form-input"
-                onKeyDown={(e) => { if (e.key === "Enter" && !authBusy) void login(); }}
+                placeholder="********"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !authBusy) void login();
+                }}
               />
             </div>
-            <button
-              type="button"
-              onClick={() => void login()}
-              disabled={authBusy}
-              className="btn-form btn-form-primary mt-1 w-full"
-            >
-              {authBusy ? "Signing in…" : "Sign in"}
+            <button type="button" onClick={() => void login()} disabled={authBusy} className="db-btn db-btn-primary w-full">
+              {authBusy ? "Signing in..." : "Sign In"}
             </button>
           </div>
           {authError ? <p className="mt-3 text-sm text-red-600">{authError}</p> : null}

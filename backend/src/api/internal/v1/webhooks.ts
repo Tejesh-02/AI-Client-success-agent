@@ -104,5 +104,53 @@ export const createInternalWebhooksRouter = (context: ServiceContext): Router =>
     }
   });
 
+  router.get("/webhook-health", requireRoles(["admin"]), async (req, res, next) => {
+    try {
+      if (!req.internalAuth) {
+        res.status(401).json({ error: "Missing internal auth context" });
+        return;
+      }
+
+      const items = await context.webhookService.healthSummary(req.internalAuth.companyId);
+      res.json({ items, total: items.length });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/webhook-configs/:id/test", requireRoles(["admin"]), async (req, res, next) => {
+    try {
+      if (!req.internalAuth) {
+        res.status(401).json({ error: "Missing internal auth context" });
+        return;
+      }
+      const event = await context.webhookService.testConfig(req.internalAuth.companyId, req.params.id);
+      if (!event) {
+        res.status(404).json({ error: "Config not found" });
+        return;
+      }
+      res.json({ event });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/webhook-events/:id/retry", requireRoles(["admin"]), async (req, res, next) => {
+    try {
+      if (!req.internalAuth) {
+        res.status(401).json({ error: "Missing internal auth context" });
+        return;
+      }
+      const event = await context.webhookService.retryEvent(req.internalAuth.companyId, req.params.id);
+      if (!event) {
+        res.status(404).json({ error: "Webhook event not found or config disabled" });
+        return;
+      }
+      res.json({ event });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   return router;
 };

@@ -151,6 +151,21 @@ export class WebhookService {
     return true;
   }
 
+  async findConfig(companyId: string, id: string): Promise<WebhookConfig | null> {
+    if (this.supabase) {
+      const { data, error } = await this.supabase
+        .from("webhook_configs")
+        .select("id, company_id, url, secret, events, enabled, created_at, updated_at")
+        .eq("company_id", companyId)
+        .eq("id", id)
+        .maybeSingle();
+      if (error) throw new Error(`Failed to load webhook config: ${error.message}`);
+      return data ? mapConfigRow(data as WebhookConfigRow) : null;
+    }
+
+    return this.store.webhookConfigs.find((c) => c.companyId === companyId && c.id === id) ?? null;
+  }
+
   async listEvents(companyId: string, configId?: string, limit = 100): Promise<WebhookEvent[]> {
     if (this.supabase) {
       if (configId) {
@@ -186,85 +201,201 @@ export class WebhookService {
       .slice(0, limit);
   }
 
+  async findEvent(companyId: string, eventId: string): Promise<WebhookEvent | null> {
+    if (this.supabase) {
+      const { data, error } = await this.supabase
+        .from("webhook_events")
+        .select("id, config_id, event, payload, status, attempts, last_error, created_at")
+        .eq("id", eventId)
+        .maybeSingle();
+      if (error) throw new Error(`Failed to load webhook event: ${error.message}`);
+      if (!data) return null;
+
+      const config = await this.findConfig(companyId, (data as WebhookEventRow).config_id);
+      if (!config) return null;
+      return mapEventRow(data as WebhookEventRow);
+    }
+
+    const found = this.store.webhookEvents.find((evt) => evt.id === eventId);
+    if (!found) return null;
+    const config = this.store.webhookConfigs.find((cfg) => cfg.id === found.configId && cfg.companyId === companyId);
+    if (!config) return null;
+    return found;
+  }
+
   async dispatch(companyId: string, event: string, payload: Record<string, unknown>): Promise<void> {
     const configs = await this.listConfigs(companyId);
-    const body = JSON.stringify({ event, payload, timestamp: new Date().toISOString() });
-
     for (const config of configs) {
       if (!config.enabled || !config.events.includes(event)) continue;
+      await this.deliverEvent(config, event, payload);
+    }
+  }
 
-      const eventId = makeId("webhook_evt");
-      const createdAt = new Date().toISOString();
-      const eventRecord: WebhookEvent = {
-        id: eventId,
-        configId: config.id,
-        event,
-        payload,
-        status: "pending",
-        attempts: 0,
-        lastError: null,
-        createdAt
+  async testConfig(companyId: string, configId: string): Promise<WebhookEvent | null> {
+    const config = await this.findConfig(companyId, configId);
+    if (!config) return null;
+    return this.deliverEvent(config, "webhook.test", {
+      message: "ClientPulse webhook test",
+      testedAt: new Date().toISOString()
+    });
+  }
+
+  async retryEvent(companyId: string, eventId: string): Promise<WebhookEvent | null> {
+    const existing = await this.findEvent(companyId, eventId);
+    if (!existing) return null;
+    const config = await this.findConfig(companyId, existing.configId);
+    if (!config || !config.enabled) return null;
+
+    return this.deliverEvent(config, existing.event, existing.payload, existing);
+  }
+
+  async healthSummary(companyId: string): Promise<{
+    configId: string;
+    url: string;
+    enabled: boolean;
+    deliveries: number;
+    failed: number;
+    failureRate: number;
+    lastEventAt: string | null;
+    lastStatus: "ok" | "degraded" | "down" | "idle";
+  }[]> {
+    const configs = await this.listConfigs(companyId);
+    const events = await this.listEvents(companyId, undefined, 500);
+    const grouped = new Map<string, WebhookEvent[]>();
+    for (const evt of events) {
+      const arr = grouped.get(evt.configId) ?? [];
+      arr.push(evt);
+      grouped.set(evt.configId, arr);
+    }
+
+    return configs.map((cfg) => {
+      const cfgEvents = grouped.get(cfg.id) ?? [];
+      const deliveries = cfgEvents.length;
+      const failed = cfgEvents.filter((evt) => evt.status === "failed").length;
+      const failureRate = deliveries > 0 ? Number(((failed / deliveries) * 100).toFixed(1)) : 0;
+      const last = cfgEvents[0];
+      const lastStatus = !last
+        ? "idle"
+        : last.status === "sent"
+          ? failureRate <= 5
+            ? "ok"
+            : "degraded"
+          : "down";
+
+      return {
+        configId: cfg.id,
+        url: cfg.url,
+        enabled: cfg.enabled,
+        deliveries,
+        failed,
+        failureRate,
+        lastEventAt: last?.createdAt ?? null,
+        lastStatus
       };
+    });
+  }
 
-      if (this.supabase) {
+  private async deliverEvent(
+    config: WebhookConfig,
+    event: string,
+    payload: Record<string, unknown>,
+    existing?: WebhookEvent
+  ): Promise<WebhookEvent> {
+    const eventId = existing?.id ?? makeId("webhook_evt");
+    const createdAt = existing?.createdAt ?? new Date().toISOString();
+    const previousAttempts = existing?.attempts ?? 0;
+
+    if (this.supabase) {
+      if (!existing) {
         await this.supabase.from("webhook_events").insert({
           id: eventId,
           config_id: config.id,
           event,
           payload,
           status: "pending",
-          attempts: 0,
+          attempts: previousAttempts,
           last_error: null,
           created_at: createdAt
         });
       } else {
-        this.store.webhookEvents.push(eventRecord);
+        await this.supabase
+          .from("webhook_events")
+          .update({ status: "pending", last_error: null })
+          .eq("id", eventId);
       }
-
-      try {
-        const signature = createHmac("sha256", config.secret).update(body).digest("hex");
-        const res = await fetch(config.url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Webhook-Signature": `sha256=${signature}`
-          },
-          body
-        });
-
-        const success = res.ok;
-        const newStatus = success ? "sent" : "failed";
-        const lastError = success ? null : `${res.status} ${await res.text()}`;
-
-        if (this.supabase) {
-          await this.supabase
-            .from("webhook_events")
-            .update({ status: newStatus, attempts: 1, last_error: lastError })
-            .eq("id", eventId);
-        } else {
-          const stored = this.store.webhookEvents.find((e) => e.id === eventId);
-          if (stored) {
-            stored.status = newStatus;
-            stored.attempts = 1;
-            stored.lastError = lastError;
-          }
-        }
-      } catch (err) {
-        const lastError = err instanceof Error ? err.message : String(err);
-        if (this.supabase) {
-          await this.supabase
-            .from("webhook_events")
-            .update({ status: "failed", attempts: 1, last_error: lastError })
-            .eq("id", eventId);
-        } else {
-          const stored = this.store.webhookEvents.find((e) => e.id === eventId);
-          if (stored) {
-            stored.status = "failed";
-            stored.attempts = 1;
-            stored.lastError = lastError;
-          }
-        }
+    } else if (!existing) {
+      this.store.webhookEvents.push({
+        id: eventId,
+        configId: config.id,
+        event,
+        payload,
+        status: "pending",
+        attempts: previousAttempts,
+        lastError: null,
+        createdAt
+      });
+    } else {
+      const stored = this.store.webhookEvents.find((item) => item.id === eventId);
+      if (stored) {
+        stored.status = "pending";
+        stored.lastError = null;
       }
     }
+
+    const body = JSON.stringify({ event, payload, timestamp: new Date().toISOString() });
+    let newStatus: "sent" | "failed" = "sent";
+    let lastError: string | null = null;
+    try {
+      const signature = createHmac("sha256", config.secret).update(body).digest("hex");
+      const res = await fetch(config.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Webhook-Signature": `sha256=${signature}`
+        },
+        body
+      });
+
+      if (!res.ok) {
+        newStatus = "failed";
+        lastError = `${res.status} ${await res.text()}`;
+      }
+    } catch (err) {
+      newStatus = "failed";
+      lastError = err instanceof Error ? err.message : String(err);
+    }
+
+    const attempts = previousAttempts + 1;
+    if (this.supabase) {
+      const { data, error } = await this.supabase
+        .from("webhook_events")
+        .update({ status: newStatus, attempts, last_error: lastError })
+        .eq("id", eventId)
+        .select("id, config_id, event, payload, status, attempts, last_error, created_at")
+        .single();
+      if (error) throw new Error(`Failed to update webhook event: ${error.message}`);
+      return mapEventRow(data as WebhookEventRow);
+    }
+
+    const stored = this.store.webhookEvents.find((item) => item.id === eventId);
+    if (stored) {
+      stored.status = newStatus;
+      stored.attempts = attempts;
+      stored.lastError = lastError;
+      return stored;
+    }
+
+    const fallback: WebhookEvent = {
+      id: eventId,
+      configId: config.id,
+      event,
+      payload,
+      status: newStatus,
+      attempts,
+      lastError,
+      createdAt
+    };
+    this.store.webhookEvents.push(fallback);
+    return fallback;
   }
 }

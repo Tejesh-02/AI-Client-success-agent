@@ -154,4 +154,23 @@ export class AuditService {
 
     return { items, total };
   }
+
+  async findById(companyId: string, id: string): Promise<AuditLog | null> {
+    if (this.supabase) {
+      const { data, error } = await this.supabase
+        .from("audit_logs")
+        .select("id, company_id, actor_type, actor_id, action, resource_type, resource_id, metadata, created_at")
+        .eq("company_id", companyId)
+        .eq("id", id)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(`Failed to load audit log: ${error.message}`);
+      }
+
+      return data ? mapRowToAudit(data as AuditRow) : null;
+    }
+
+    return this.store.auditLogs.find((log) => log.companyId === companyId && log.id === id) ?? null;
+  }
 }

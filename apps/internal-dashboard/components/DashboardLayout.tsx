@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -14,18 +14,31 @@ interface DashboardLayoutProps {
   onboardingProgress?: { stepsDone: string[]; isProfileComplete: boolean } | null;
 }
 
-const NAV_ITEMS: { path: string; label: string; requiresKb?: boolean; requiresWebhooks?: boolean; requiresAudit?: boolean }[] = [
-  { path: "/overview", label: "Overview" },
-  { path: "/conversations", label: "Conversations" },
-  { path: "/tickets", label: "Tickets" },
-  { path: "/knowledge", label: "Knowledge base", requiresKb: true },
-  { path: "/routing", label: "Routing", requiresKb: true },
-  { path: "/escalation", label: "Escalation", requiresKb: true },
-  { path: "/canned", label: "Canned responses", requiresKb: true },
-  { path: "/gaps", label: "Knowledge gaps", requiresKb: true },
-  { path: "/webhooks", label: "Webhooks", requiresWebhooks: true },
-  { path: "/audit", label: "Audit log", requiresAudit: true }
+const NAV_ITEMS: {
+  path: string;
+  label: string;
+  group: "operations" | "configure" | "governance";
+  requiresKb?: boolean;
+  requiresWebhooks?: boolean;
+  requiresAudit?: boolean;
+}[] = [
+  { path: "/overview", label: "Overview", group: "operations" },
+  { path: "/conversations", label: "Conversations", group: "operations" },
+  { path: "/tickets", label: "Tickets", group: "operations" },
+  { path: "/knowledge", label: "Knowledge Base", group: "configure", requiresKb: true },
+  { path: "/routing", label: "Routing", group: "configure", requiresKb: true },
+  { path: "/escalation", label: "Escalation", group: "configure", requiresKb: true },
+  { path: "/canned", label: "Canned Responses", group: "configure", requiresKb: true },
+  { path: "/gaps", label: "Knowledge Gaps", group: "configure", requiresKb: true },
+  { path: "/webhooks", label: "Webhooks", group: "governance", requiresWebhooks: true },
+  { path: "/audit", label: "Audit Log", group: "governance", requiresAudit: true }
 ];
+
+const GROUP_LABELS: Record<(typeof NAV_ITEMS)[number]["group"], string> = {
+  operations: "Operations",
+  configure: "Configure",
+  governance: "Governance"
+};
 
 export function DashboardLayout({
   children,
@@ -37,66 +50,157 @@ export function DashboardLayout({
   onboardingProgress = null
 }: DashboardLayoutProps) {
   const pathname = usePathname();
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [collapsed, setCollapsed] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [dateRange, setDateRange] = useState("7");
+  const [liveEnabled, setLiveEnabled] = useState(true);
 
-  const visibleNavItems = NAV_ITEMS.filter((item) => {
-    if (item.requiresWebhooks && !canViewWebhooks) return false;
-    if (item.requiresAudit && !canViewAuditLog) return false;
-    if (item.requiresKb && !canManageKbSection) return false;
-    return true;
-  });
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const visibleNavItems = useMemo(
+    () =>
+      NAV_ITEMS.filter((item) => {
+        if (item.requiresWebhooks && !canViewWebhooks) return false;
+        if (item.requiresAudit && !canViewAuditLog) return false;
+        if (item.requiresKb && !canManageKbSection) return false;
+        return true;
+      }),
+    [canManageKbSection, canViewAuditLog, canViewWebhooks]
+  );
+
+  const grouped = useMemo(() => {
+    const map = new Map<(typeof NAV_ITEMS)[number]["group"], typeof NAV_ITEMS>();
+    for (const item of visibleNavItems) {
+      const list = map.get(item.group) ?? [];
+      list.push(item);
+      map.set(item.group, list);
+    }
+    return map;
+  }, [visibleNavItems]);
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
-      <aside className="w-56 flex-shrink-0 border-r border-slate-200 bg-white">
-        <div className="sticky top-0 flex h-screen flex-col">
-          <div className="border-b border-slate-200 p-4">
-            <Link href="/overview" className="block">
-              <h1 className="text-lg font-semibold text-slate-900">Kleo - AI CLIENT SUCCESS AGENT</h1>
-            </Link>
-            <p className="text-xs text-slate-500">CS Dashboard</p>
-            {onboardingProgress && !onboardingProgress.isProfileComplete ? (
-              <p className="mt-1 text-xs text-sky-600">
-                Setup: {onboardingProgress.stepsDone.length}/5 steps
-              </p>
+    <div className={`db-shell ${collapsed ? "db-shell-collapsed" : ""}`}>
+      <aside className={`db-sidebar ${collapsed ? "db-sidebar-collapsed" : ""}`}>
+        <div className="db-sidebar-inner">
+          <div className="db-brand">
+            <h1 className="db-brand-title">{collapsed ? "K" : "Kleo AI"}</h1>
+            {!collapsed ? <p className="db-brand-sub">Client Success Dashboard</p> : null}
+            {!collapsed && onboardingProgress && !onboardingProgress.isProfileComplete ? (
+              <p className="db-brand-sub">Setup {onboardingProgress.stepsDone.length}/5</p>
             ) : null}
+            <button
+              type="button"
+              className="db-btn db-btn-secondary"
+              onClick={() => setCollapsed((value) => !value)}
+              style={{ marginTop: "0.55rem", width: "100%" }}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {collapsed ? "Expand" : "Collapse"}
+            </button>
           </div>
-          <nav className="flex-1 overflow-y-auto p-2" aria-label="Dashboard sections">
-            {visibleNavItems.map((item) => {
-              const isActive = pathname === item.path;
+
+          <nav className="db-nav" aria-label="Dashboard sections">
+            {(["operations", "configure", "governance"] as const).map((groupKey) => {
+              const items = grouped.get(groupKey) ?? [];
+              if (items.length === 0) return null;
               return (
-                <Link
-                  key={item.path}
-                  href={item.path}
-                  className={`block w-full rounded-lg px-3 py-2 text-left text-sm focus:outline-none ${
-                    isActive
-                      ? "bg-slate-200 font-medium text-slate-900"
-                      : "text-slate-700 hover:bg-slate-100 focus:bg-slate-100"
-                  }`}
-                  aria-label={`Go to ${item.label}`}
-                  aria-current={isActive ? "page" : undefined}
-                >
-                  {item.label}
-                </Link>
+                <div key={groupKey}>
+                  {!collapsed ? <div className="db-nav-group-label">{GROUP_LABELS[groupKey]}</div> : null}
+                  {items.map((item) => {
+                    const isActive = pathname === item.path;
+                    return (
+                      <Link
+                        key={item.path}
+                        href={item.path}
+                        className={`db-nav-link ${isActive ? "db-nav-link-active" : ""}`}
+                        aria-current={isActive ? "page" : undefined}
+                      >
+                        <span className="db-nav-link-text">{collapsed ? item.label.charAt(0) : item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
               );
             })}
           </nav>
-          <div className="border-t border-slate-200 p-3">
-            <p className="truncate text-xs text-slate-500" title={userEmail ?? undefined}>
-              {userEmail ?? "—"}
-            </p>
-            <button
-              type="button"
-              onClick={onLogout}
-              className="mt-2 w-full rounded-lg bg-slate-100 px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-200 focus:outline-none"
-            >
+
+          <div className="db-sidebar-foot">
+            {!collapsed ? (
+              <p className="db-brand-sub db-user-label" title={userEmail ?? undefined}>
+                {userEmail ?? "--"}
+              </p>
+            ) : null}
+            <button type="button" onClick={onLogout} className="db-btn db-btn-secondary" style={{ width: "100%" }}>
               Logout
             </button>
           </div>
         </div>
       </aside>
-      <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-6xl px-6 py-8">{children}</div>
-      </main>
+
+      <div className="db-main">
+        <header className="db-topbar">
+          <input
+            ref={searchRef}
+            className="db-command"
+            placeholder="Search conversations, clients, tickets... (Ctrl/Cmd+K)"
+            value={globalSearch}
+            onChange={(event) => {
+              const query = event.target.value;
+              setGlobalSearch(query);
+              window.dispatchEvent(new CustomEvent("dashboard:global-search", { detail: { query } }));
+            }}
+            aria-label="Global search"
+          />
+          <select
+            className="db-select"
+            style={{ width: "auto", minWidth: "120px" }}
+            value={dateRange}
+            onChange={(event) => {
+              const value = event.target.value;
+              setDateRange(value);
+              window.dispatchEvent(
+                new CustomEvent("dashboard:date-range", { detail: { days: Number.parseInt(value, 10) || 7 } })
+              );
+            }}
+            aria-label="Date range"
+          >
+            <option value="1">Last 24h</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+          </select>
+          <button
+            type="button"
+            className={`db-btn ${liveEnabled ? "db-btn-primary" : "db-btn-secondary"}`}
+            onClick={() => {
+              const next = !liveEnabled;
+              setLiveEnabled(next);
+              window.dispatchEvent(new CustomEvent("dashboard:live-toggle", { detail: { enabled: next } }));
+            }}
+            aria-label={liveEnabled ? "Disable live mode" : "Enable live mode"}
+          >
+            {liveEnabled ? "Live On" : "Live Off"}
+          </button>
+          <button
+            type="button"
+            className="db-btn db-btn-secondary"
+            onClick={() => window.dispatchEvent(new Event("dashboard:refresh"))}
+          >
+            Refresh
+          </button>
+        </header>
+
+        <main className="db-content">{children}</main>
+      </div>
     </div>
   );
 }

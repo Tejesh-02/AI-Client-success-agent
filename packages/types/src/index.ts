@@ -82,6 +82,7 @@ export interface TicketSummary {
   assignedTo: string | null;
   referenceNumber: string;
   createdAt: string;
+  updatedAt?: string;
   slaDueAt?: string | null;
 }
 
@@ -92,4 +93,110 @@ export interface CompanyDocumentSummary {
   content: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface MetricDelta {
+  current: number;
+  previous: number;
+  changePct: number;
+  direction: "up" | "down" | "flat";
+}
+
+export interface DashboardAttentionItem {
+  conversationId: string;
+  clientId: string;
+  clientName?: string;
+  status: ConversationSummary["status"];
+  sentiment: ConversationSummary["sentiment"];
+  priority: TicketSeverity | null;
+  hasTicket: boolean;
+  ticketId?: string;
+  lastMessageAt: string;
+}
+
+export interface DashboardSlaRisk {
+  overdue: number;
+  dueWithin4h: number;
+  dueWithin24h: number;
+}
+
+export interface IssueTypeDistributionItem {
+  issueTypeId: string | null;
+  label: string;
+  count: number;
+  share: number;
+}
+
+export interface DashboardOverviewMetrics {
+  from: string;
+  to: string;
+  severityFilter: TicketSeverity | null;
+  conversations: MetricDelta;
+  ticketsRaised: MetricDelta;
+  ticketsResolved: MetricDelta;
+  aiResolutionRate: MetricDelta;
+  emergencyOpen: number;
+  attentionQueue: DashboardAttentionItem[];
+  slaRisk: DashboardSlaRisk;
+  issueTypeDistribution: IssueTypeDistributionItem[];
+}
+
+export interface ConversationContext {
+  conversationId: string;
+  companyId: string;
+  client: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  relatedTickets: TicketSummary[];
+  ai: {
+    averageConfidence: number | null;
+    lowConfidenceCount: number;
+    kbArticleIds: string[];
+  };
+  lastActivityAt: string;
+}
+
+export interface TicketBulkUpdateRequest {
+  ticketIds: string[];
+  status?: TicketStatus;
+  severity?: TicketSeverity;
+  assignedTo?: string | null;
+}
+
+export interface KnowledgeGapCluster {
+  id: string;
+  topic: string;
+  count: number;
+  avgConfidence: number | null;
+  highestSeverity: TicketSeverity;
+  sampleConversationId: string;
+  sampleMessagePreview: string;
+  latestAt: string;
+  status: "new" | "drafted" | "published" | "ignored";
+}
+
+export interface WebhookHealthSummary {
+  configId: string;
+  url: string;
+  enabled: boolean;
+  deliveries: number;
+  failed: number;
+  failureRate: number;
+  lastEventAt: string | null;
+  lastStatus: "ok" | "degraded" | "down" | "idle";
+}
+
+export interface AuditDiff {
+  id: string;
+  actorType: string;
+  actorId: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  createdAt: string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+  changedKeys: string[];
 }

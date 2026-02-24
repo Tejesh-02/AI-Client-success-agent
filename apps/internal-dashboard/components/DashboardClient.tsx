@@ -39,12 +39,25 @@ export const DashboardClient = ({ token, user, onSessionExpired }: DashboardClie
       {section === "webhooks" && (perms.canViewWebhooks ? <WebhooksPage {...commonProps} /> : <Unauthorized />)}
       {section === "audit" && (perms.canViewAuditLog ? <AuditPage {...commonProps} /> : <Unauthorized />)}
       {section === "gaps" && (perms.canManageKb ? <GapsPage {...commonProps} /> : <Unauthorized />)}
+      {![
+        "overview",
+        "conversations",
+        "tickets",
+        "knowledge",
+        "routing",
+        "escalation",
+        "canned",
+        "webhooks",
+        "audit",
+        "gaps"
+      ].includes(section) ? <OverviewPage {...commonProps} /> : null}
     </div>
   );
 };
 
 const Unauthorized = () => (
-  <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-    <p className="text-slate-500">You do not have permission to view this section.</p>
+  <div className="db-panel">
+    <h2 className="db-panel-title">Restricted Section</h2>
+    <p className="text-sm text-slate-500">Your role does not include access to this page.</p>
   </div>
 );

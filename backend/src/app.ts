@@ -97,7 +97,7 @@ export const createApp = (store?: InMemoryStore) => {
   app.use("/internal/v1", requireRoles(["admin", "manager"]), createInternalIssueTypesRouter(context));
   app.use("/internal/v1", requireRoles(["admin", "manager"]), createInternalEscalationRulesRouter(context));
   app.use("/internal/v1", createInternalCannedResponsesRouter(context));
-  app.use("/internal/v1", requireRoles(["admin", "manager"]), createInternalAnalyticsRouter(context));
+  app.use("/internal/v1", requireRoles(["admin", "manager", "agent"]), createInternalAnalyticsRouter(context));
   app.use("/internal/v1", createInternalWebhooksRouter(context));
   app.use("/internal/v1", createInternalOnboardingRouter(context));
 
