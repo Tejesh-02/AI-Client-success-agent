@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { ticketSeverities } from "@clientpulse/types";
+import { ticketSeverities } from "../../../../../packages/types/src/index";
 import type { ServiceContext } from "../../../services/context";
 import type { EscalationTriggerType } from "../../../types/models";
 

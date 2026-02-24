@@ -1,7 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
-import { ticketSeverities, type DashboardOverviewMetrics, type MetricDelta, type TicketSeverity } from "@clientpulse/types";
 import type { ServiceContext } from "../../../services/context";
+import {
+  ticketSeverities,
+  type DashboardOverviewMetrics,
+  type MetricDelta,
+  type TicketSeverity
+} from "../../../../../packages/types/src/index";
 
 const knowledgeGapsQuerySchema = z.object({
   threshold: z.coerce.number().min(0).max(1).optional()

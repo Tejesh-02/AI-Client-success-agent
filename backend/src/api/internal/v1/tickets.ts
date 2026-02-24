@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
-import { ticketSeverities, ticketStatuses } from "@clientpulse/types";
 import type { ServiceContext } from "../../../services/context";
+import { ticketSeverities, ticketStatuses } from "../../../../../packages/types/src/index";
 
 const ticketFilterSchema = z.object({
   status: z.enum(ticketStatuses).optional(),
